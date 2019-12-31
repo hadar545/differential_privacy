@@ -1,0 +1,2 @@
+model_checkpoint_path: "model_at_epoch_4_iter_7500"
+all_model_checkpoint_paths: "model_at_epoch_4_iter_7500"
