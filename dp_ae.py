@@ -42,7 +42,7 @@ class basic_AE(Model):
     def _create_decoder(self) -> list:
         layers = []
         layers.append(Dense(196, activation='relu'))
-        layers.append(Reshape(7, 7, 4))
+        layers.append(Reshape((7, 7, 4)))
         layers.append(Conv2D(8, 3, activation='relu', padding='same'))
         layers.append(Conv2D(16, 3, activation='relu', padding='same'))
         layers.append(UpSampling2D())
