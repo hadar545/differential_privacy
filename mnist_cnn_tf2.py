@@ -10,6 +10,11 @@ import datetime
 import utils
 
 
+############# basic hyperparameters #############
+
+EPOCHS = 2
+BATCH_SIZE = 32
+LEARNING_RATE = 0.001
 
 ############# data #############
 
@@ -19,8 +24,6 @@ x_train, x_test = x_train/255.0, x_test/255.0
 # Add a channels dimension
 x_train = x_train[..., tf.newaxis]
 x_test = x_test[..., tf.newaxis]
-
-BATCH_SIZE = 32
 
 # Use tf.data to batch and shuffle the dataset:
 train_ds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).shuffle(10000).batch(BATCH_SIZE, drop_remainder=True)
@@ -85,14 +88,14 @@ class shallow_CNN(Model):
         return 'shallow_CNN_for_mnist'
 
 
-model_of_choice = shallow_CNN
+model_of_choice = basic_CNN
 
 # Create an instance of the model
 model = model_of_choice()
 
 # Choose an optimizer and loss function for training:
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy()
-optimizer = tf.keras.optimizers.Adam()
+optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
 
 # metrics
 train_loss = tf.keras.metrics.Mean(name='train_loss')
@@ -137,6 +140,7 @@ test_accuracy_log = []
 # (reminder to myself) to open tensorboard - open the link returned from the terminal command: %tensorboard --logdir logs/gradient_tape
 current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 tb_dir = utils.check_dir_exists('logs/gradient_tape/' + str(model))
+print("tensorboard logdir: {}".format(tb_dir + '/' + current_time))
 train_log_dir = tb_dir + '/' + current_time + '/train'
 test_log_dir = tb_dir + '/' + current_time + '/test'
 train_summary_writer = tf.summary.create_file_writer(train_log_dir)
@@ -144,7 +148,7 @@ test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
 def log(iter):
 
-    iter_log.append(iter_counter)
+    iter_log.append(iter)
     train_accuracy_log.append(train_accuracy.result())
     test_accuracy_log.append(test_accuracy.result())
 
@@ -158,11 +162,9 @@ def log(iter):
 
 ############# training #############
 
-EPOCHS = 2
-
 # load pre trained models
 pre_trained_epochs = 0 # number of epochs this model already trained for
-use_pretrained = 1
+use_pretrained = 0
 pretrained_model_used = None
 saved_models_dir = utils.check_dir_exists('models/' + str(model))
 if use_pretrained:
