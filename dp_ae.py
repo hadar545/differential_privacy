@@ -97,45 +97,50 @@ model = model_of_choice()
 
 # Choose an optimizer and loss function for training:
 # loss_object = tf.keras.losses.mean_squared_error()
-def loss(images, reconstructions=None):
+def mse_loss(images, reconstructions=None):
     """ calc the reconstruction error """
+    _cast = lambda x: tf.cast(x, tf.float32)
     if reconstructions is None:
         reconstructions = model(images)
-    return tf.reduce_mean(tf.square(tf.subtract(reconstructions, images)))
+    # return tf.reduce_mean(tf.square(tf.subtract(_cast(reconstructions), _cast(images))))
+    ret = tf.reduce_mean(tf.square(tf.subtract(_cast(model(images)), _cast(images))))
+    return ret
+
+
 optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
 
-# metrics
+# # metrics
 train_loss = tf.keras.metrics.Mean(name='train_loss')
-train_accuracy = tf.keras.metrics.mean_squared_error()
+# train_accuracy = tf.keras.metrics.mean_squared_error()
 test_loss = tf.keras.metrics.Mean(name='test_loss')
-test_accuracy = tf.keras.metrics.mean_squared_error()
+# test_accuracy = tf.keras.metrics.mean_squared_error()
 def reset_metrics():
     train_loss.reset_states()
-    train_accuracy.reset_states()
+#     train_accuracy.reset_states()
     test_loss.reset_states()
-    test_accuracy.reset_states()
+#     test_accuracy.reset_states()
 
 
 # training
-@tf.function
+# @tf.function
 def train_step(images, reconstructions=None):
     if reconstructions is None:
         reconstructions = model(images)
     with tf.GradientTape() as tape:
-        gradients = tape.gradient(loss(images, reconstructions), model.trainable_variables)
+        gradients = tape.gradient(mse_loss(images, reconstructions), model.trainable_variables)
+        # gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        train_loss(loss)
-        train_accuracy(images, reconstructions)
+        train_loss(mse_loss(images, reconstructions))
+        # train_accuracy(images, reconstructions)
 
 
 # testing
-@tf.function
+# @tf.function
 def test_step(images, reconstructions=None):
     if reconstructions is None:
         reconstructions = model(images)
-    t_loss = loss(images)
-    test_loss(t_loss)
-    test_accuracy(images, reconstructions)
+    test_loss(mse_loss(images, reconstructions))
+    # test_accuracy(images, reconstructions)
 
 
 ############# logs #############
@@ -143,8 +148,10 @@ def test_step(images, reconstructions=None):
 # local logs:
 iter_counter = 0
 iter_log = []
-train_accuracy_log = []
-test_accuracy_log = []
+# train_accuracy_log = []
+# test_accuracy_log = []
+train_loss_log = []
+test_loss_log = []
 
 # tensorboard logs - Set up summary writers to write the summaries to disk
 # (reminder to myself) to open tensorboard - open the link returned from the terminal command: %tensorboard --logdir logs/gradient_tape
@@ -160,17 +167,19 @@ test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 def log(iter, images, reconstructions, test_images, test_reconstructions):
 
     iter_log.append(iter)
-    train_accuracy_log.append(train_accuracy.result())
-    test_accuracy_log.append(test_accuracy.result())
+    train_loss_log.append(mse_loss(images, reconstructions))
+    test_loss_log.append(mse_loss(test_images, test_reconstructions))
+    # train_accuracy_log.append(train_accuracy.result())
+    # test_accuracy_log.append(test_accuracy.result())
 
     with train_summary_writer.as_default():
         tf.summary.scalar('loss', train_loss.result(), step=iter)
-        tf.summary.scalar('accuracy', train_accuracy.result(), step=iter)
+        # tf.summary.scalar('accuracy', train_accuracy.result(), step=iter)
         tf.summary.image('original', images, max_outputs=10, step=iter)
         tf.summary.image('reconstructed', reconstructions, max_outputs=10, step=iter)
     with test_summary_writer.as_default():
         tf.summary.scalar('loss', test_loss.result(), step=iter)
-        tf.summary.scalar('accuracy', test_accuracy.result(), step=iter)
+        # tf.summary.scalar('accuracy', test_accuracy.result(), step=iter)
         tf.summary.image('original', test_images, max_outputs=10, step=iter)
         tf.summary.image('reconstructed', test_reconstructions, max_outputs=10, step=iter)
 
@@ -184,24 +193,24 @@ pre_trained_epochs = 0  # number of epochs this model already trained for
 use_pretrained = 0
 pretrained_model_used = None
 saved_models_dir = utils.check_dir_exists('models/' + str(model))
-# if use_pretrained:
-#     saved_models = [x.split('.')[0] for x in os.listdir(saved_models_dir) if x.endswith('.index')]
-#     if len(saved_models):
-#         saved_models.sort()
-#         pre_trained_model_path = saved_models[-1]
-#
-#         model = model_of_choice()
-#         model.compile(loss=loss_object, optimizer=optimizer)
-#         # run a single step in order to initialize the model (necessary before loading weights)
-#         # train_step(x_train[:1], y_train[:1])
-#         for images, labels in train_ds:
-#             train_step(images, labels)
-#             break
-#
-#         model.load_weights(saved_models_dir + '/' + pre_trained_model_path)
-#         pre_trained_epochs = int(pre_trained_model_path.split('_')[-3])  # -3 because model_title later on
-#         iter_counter = int(pre_trained_model_path.split('_')[-1])  # -1 because model_title later on
-#         pretrained_model_used = pre_trained_model_path
+if use_pretrained:
+    saved_models = [x.split('.')[0] for x in os.listdir(saved_models_dir) if x.endswith('.index')]
+    if len(saved_models):
+        saved_models.sort()
+        pre_trained_model_path = saved_models[-1]
+
+        model = model_of_choice()
+        model.compile(loss=mse_loss, optimizer=optimizer)
+        # run a single step in order to initialize the model (necessary before loading weights)
+        # train_step(x_train[:1], y_train[:1])
+        for images, labels in train_ds:
+            train_step(images, labels)
+            break
+
+        model.load_weights(saved_models_dir + '/' + pre_trained_model_path)
+        pre_trained_epochs = int(pre_trained_model_path.split('_')[-3])  # -3 because model_title later on
+        iter_counter = int(pre_trained_model_path.split('_')[-1])  # -1 because model_title later on
+        pretrained_model_used = pre_trained_model_path
 if pretrained_model_used is None:
     print('(did not use any pre-trained model)')
 else:
@@ -225,12 +234,10 @@ for epoch in range(pre_trained_epochs, pre_trained_epochs + EPOCHS):
 
         iter_counter += 1
 
-    template = 'finished epoch {}, Step {}, Loss: {}, Accuracy: {}, Test Loss: {}, Test Accuracy: {}'
+    template = 'finished epoch {}, Step {}, Loss: {}, Test Loss: {}'
     print(template.format(epoch + 1, iter_counter,
                           train_loss.result(),
-                          train_accuracy.result(),
-                          test_loss.result(),
-                          test_accuracy.result()))
+                          test_loss.result()))
 
     # Reset the metrics for the next epoch
     reset_metrics()
@@ -246,9 +253,9 @@ print('saved model: ' + model_title)
 
 # plot acc:
 plt.figure()
-plt.title(str(model) + ' - Accuracy per step\n' + current_time)
-plt.plot(iter_log, train_accuracy_log, 'b', label='train')
-plt.plot(iter_log, test_accuracy_log, 'r', label='test')
+plt.title(str(model) + ' - Loss per step\n' + current_time)
+plt.plot(iter_log, train_loss_log, 'b', label='train')
+plt.plot(iter_log, test_loss_log, 'r', label='test')
 plt.legend()
 plt.xlabel('iteration')
 plt.ylabel('accuracy')
