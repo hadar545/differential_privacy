@@ -35,8 +35,6 @@ train_ds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).shuffle(10000)
 test_ds = tf.data.Dataset.from_tensor_slices((x_test, y_test)).batch(BATCH_SIZE, drop_remainder=True)
 
 
-############# models #############
-
 class basic_AE(Model):
 
     def __init__(self, lambda_: float=.001):
@@ -89,67 +87,52 @@ class basic_AE(Model):
     def __str__(self):
         return 'basic_AE'
 
+    def mse_loss(self, images):
+        _cast = lambda x: tf.cast(x, tf.float32)
+        return tf.reduce_mean(tf.square(tf.subtract(_cast(super(images)), _cast(images))))
+
 
 model_of_choice = basic_AE
 
 # Create an instance of the model
 model = model_of_choice()
 
-# Choose an optimizer and loss function for training:
-# loss_object = tf.keras.losses.mean_squared_error()
-def mse_loss(images, reconstructions=None):
+
+def mse_loss(images, model):
     """ calc the reconstruction error """
     _cast = lambda x: tf.cast(x, tf.float32)
-    if reconstructions is None:
-        reconstructions = model(images)
-    # return tf.reduce_mean(tf.square(tf.subtract(_cast(reconstructions), _cast(images))))
-    ret = tf.reduce_mean(tf.square(tf.subtract(_cast(model(images)), _cast(images))))
-    return ret
+    return tf.reduce_mean(tf.square(tf.subtract(_cast(model(images)), _cast(images))))
 
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
 
-# # metrics
 train_loss = tf.keras.metrics.Mean(name='train_loss')
-# train_accuracy = tf.keras.metrics.mean_squared_error()
 test_loss = tf.keras.metrics.Mean(name='test_loss')
-# test_accuracy = tf.keras.metrics.mean_squared_error()
+
+
 def reset_metrics():
     train_loss.reset_states()
-#     train_accuracy.reset_states()
     test_loss.reset_states()
-#     test_accuracy.reset_states()
 
 
 # training
 # @tf.function
-def train_step(images, reconstructions=None):
-    if reconstructions is None:
-        reconstructions = model(images)
+def train_step(images, model):
     with tf.GradientTape() as tape:
-        gradients = tape.gradient(mse_loss(images, reconstructions), model.trainable_variables)
-        # gradients = tape.gradient(loss, model.trainable_variables)
+        gradients = tape.gradient(mse_loss(images, model), model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        train_loss(mse_loss(images, reconstructions))
-        # train_accuracy(images, reconstructions)
+        train_loss(mse_loss(images, model))
 
 
 # testing
 # @tf.function
-def test_step(images, reconstructions=None):
-    if reconstructions is None:
-        reconstructions = model(images)
-    test_loss(mse_loss(images, reconstructions))
-    # test_accuracy(images, reconstructions)
+def test_step(images, model):
+    test_loss(mse_loss(images, model))
 
 
 ############# logs #############
-
-# local logs:
 iter_counter = 0
 iter_log = []
-# train_accuracy_log = []
-# test_accuracy_log = []
 train_loss_log = []
 test_loss_log = []
 
@@ -165,21 +148,15 @@ test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
 
 def log(iter, images, reconstructions, test_images, test_reconstructions):
-
     iter_log.append(iter)
-    train_loss_log.append(mse_loss(images, reconstructions))
-    test_loss_log.append(mse_loss(test_images, test_reconstructions))
-    # train_accuracy_log.append(train_accuracy.result())
-    # test_accuracy_log.append(test_accuracy.result())
-
+    train_loss_log.append(mse_loss(images, model))
+    test_loss_log.append(mse_loss(test_images, model))
     with train_summary_writer.as_default():
         tf.summary.scalar('loss', train_loss.result(), step=iter)
-        # tf.summary.scalar('accuracy', train_accuracy.result(), step=iter)
         tf.summary.image('original', images, max_outputs=10, step=iter)
         tf.summary.image('reconstructed', reconstructions, max_outputs=10, step=iter)
     with test_summary_writer.as_default():
         tf.summary.scalar('loss', test_loss.result(), step=iter)
-        # tf.summary.scalar('accuracy', test_accuracy.result(), step=iter)
         tf.summary.image('original', test_images, max_outputs=10, step=iter)
         tf.summary.image('reconstructed', test_reconstructions, max_outputs=10, step=iter)
 
