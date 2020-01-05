@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 # from __future__ import absolute_import, division, print_function, unicode_literals
 import os
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, Reshape, UpSampling2D
+from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, Reshape, UpSampling2D, InputLayer
 from tensorflow.keras import Model
 import datetime
 
@@ -18,7 +18,8 @@ LATENT_SIZE = 2
 
 class basic_AE(Model):
 
-    def __init__(self, lambda_: float=.001, latent_: int=LATENT_SIZE,  sd_:float=.1, save_encodings=True, learning_rate=LEARNING_RATE):
+    def __init__(self, lambda_: float=.001, latent_: int=LATENT_SIZE,  sd_: float=.1, save_encodings=True,
+                 learning_rate=LEARNING_RATE):
         super(basic_AE, self).__init__()
 
         self.latent_ = latent_
@@ -41,6 +42,7 @@ class basic_AE(Model):
 
     def _create_decoder(self) -> list:
         layers = []
+        layers.append(InputLayer((28,28,1)))
         layers.append(Dense(196, activation='relu'))
         layers.append(Reshape((7, 7, 4)))
         layers.append(Conv2D(8, 3, activation='relu', padding='same'))
@@ -91,7 +93,7 @@ class basic_AE(Model):
             x = l(x)
         return x
 
-    def mse_loss(self, images):
+    def mse_loss(self, images, labels=None):
         _cast = lambda x: tf.cast(x, tf.float32)
         return tf.reduce_mean(tf.square(tf.subtract(_cast(self.call(images)), _cast(images))))
 
@@ -154,6 +156,8 @@ class ae_logger():
         self.time_of_creation = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.tb_dir = utils.check_dir_exists(tb_dir)
         print("tensorboard logdir: {}".format(self.tb_dir + '/' + self.time_of_creation))
+        print("Reminder, to open tensorboard - open the link returned from the "
+              "terminal command: %tensorboard --logdir logs/gradient_tape")
 
         self.loss_func = loss_func
 
@@ -185,9 +189,6 @@ class ae_logger():
             tf.summary.image('reconstructed', test_reconstructions, max_outputs=10, step=iter)
 
 
-
-
-
 class ae_plotter():
 
     def __init__(self):
@@ -203,28 +204,41 @@ class ae_plotter():
         plt.ylabel('loss')
         plt.show()
 
-    def plot_encodings_2Dlatent(self, model):
+    def plot_encodings_2Dlatent(self, model, images=None, labels=None):
 
-        encodings, noisy_encodings = np.array(model.encodings), np.array(model.noisy_encodings)
+        if images is None:
+            encodings, noisy_encodings = np.array(model.encodings), np.array(model.noisy_encodings)
+        else:
+            encodings, noisy_encodings = model.predict(images[:, :, None]), \
+                                         model.predict(images[:, :, None])
 
-        plt.figure()
-        sd_title = 'ax0_std=%.2f ax1_std=%.2f' % (np.std(encodings[:,0]), np.std(encodings[:,1]))
-        plt.title(str(model) + ' - Encodings\n' + sd_title)
-        plt.scatter(encodings[:, 0], encodings[:,1], s=10)
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.show()
+        if labels is None:
+            plt.figure()
+            sd_title = 'ax0_std=%.2f ax1_std=%.2f' % (np.std(encodings[:,0]), np.std(encodings[:,1]))
+            plt.title(str(model) + ' - Encodings\n' + sd_title)
+            plt.scatter(encodings[:, 0], encodings[:,1], s=10)
+            plt.xlabel('x')
+            plt.ylabel('y')
 
-        plt.figure()
-        sd_title = 'ax0_std=%.2f ax1_std=%.2f' % (np.std(noisy_encodings[:, 0]), np.std(noisy_encodings[:, 1]))
-        plt.title(str(model) + ' - Noisy Encodings\n' + sd_title)
-        plt.scatter(noisy_encodings[:, 0], noisy_encodings[:,1], s=10)
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.show()
+            plt.figure()
+            sd_title = 'ax0_std=%.2f ax1_std=%.2f' % (np.std(noisy_encodings[:, 0]), np.std(noisy_encodings[:, 1]))
+            plt.title(str(model) + ' - Noisy Encodings\n' + sd_title)
+            plt.scatter(noisy_encodings[:, 0], noisy_encodings[:,1], s=10)
+            plt.xlabel('x')
+            plt.ylabel('y')
+            plt.show()
+
+        else:
+            plt.figure()
+            plt.scatter(encodings[:, 0], encodings[:, 1], s=10, c=labels, cmap='hsv')
+            plt.xlabel('x')
+            plt.ylabel('y')
+            plt.title('')
+            plt.legend()
+            plt.show()
 
 
-def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE):
+def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE, return_labels=False):
 
     mnist = tf.keras.datasets.mnist
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -242,7 +256,8 @@ def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE):
     # Use tf.data to batch and shuffle the dataset:
     train_ds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).shuffle(10000).batch(batch_size, drop_remainder=True)
     test_ds = tf.data.Dataset.from_tensor_slices((x_test, y_test)).batch(batch_size, drop_remainder=True)
-
+    if return_labels:
+        return train_ds, test_ds, (x_train, y_train), (x_test, y_test)
     return train_ds, test_ds
 
 
@@ -269,16 +284,18 @@ def load_pre_trained_model(model_class, saved_models_dir, train_ds):
 
 
 if __name__ == '__main__':
-
-    train_ds, test_ds = prepare_data_mnist(portion=0.1)
+    EPOCHS = 1
+    # train_ds, test_ds = prepare_data_mnist(portion=1)
+    train_ds, test_ds, train, test = prepare_data_mnist(portion=.05, return_labels=True)
     model = basic_AE()
+    model.compile(loss=model.mse_loss, optimizer=model.optimizer)
     tb_dir = utils.check_dir_exists('logs/gradient_tape/' + str(model))
     saved_models_dir = utils.check_dir_exists('models/' + str(model))
     logger = ae_logger(tb_dir, model.mse_loss)
     epoch_counter, iter_counter = 0, 0
 
     # load pre-trained models
-    use_pretrained, pre_trained_model_path = 1, None
+    use_pretrained, pre_trained_model_path = 0, None
     pre_trained_epochs = 0  # number of epochs this model already trained for
     if use_pretrained:
         saved_models_dir = utils.check_dir_exists('models/' + str(model))
@@ -300,5 +317,6 @@ if __name__ == '__main__':
     # plots
     plotter = ae_plotter()
     plotter.plot_loss(model, logger)
-    plotter.plot_encodings_2Dlatent(model)
+    # plotter.plot_encodings_2Dlatent(model)
+    plotter.plot_encodings_2Dlatent(model, images=train[0], labels=train[1])
 
