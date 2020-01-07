@@ -10,7 +10,7 @@ import datetime
 import utils
 
 
-EPOCHS = 1
+EPOCHS = 0
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001
 LATENT_SIZE = 2
@@ -43,6 +43,7 @@ class basic_AE(Model):
     def _create_decoder(self) -> list:
         layers = []
         layers.append(InputLayer((28,28,1)))
+        # layers.append(InputLayer((self.latent_,1)))
         layers.append(Dense(196, activation='relu'))
         layers.append(Reshape((7, 7, 4)))
         layers.append(Conv2D(8, 3, activation='relu', padding='same'))
@@ -67,13 +68,10 @@ class basic_AE(Model):
         return layers
 
     def call_noisy(self, x):
-        x = self.encode(x)
-        z = x.copy()
-        if self.save_encodings: self.encodings.append(z)
-        z += self.sd_*np.random.randn(self.latent_)
-        if self.save_encodings: self.noisy_encodings.append(z)
-        x = self.decode(z)
-        return x
+        z = self.encode(x)
+        z_noised = z + self.sd_*np.random.randn(self.latent_)
+        x_decoded = self.decode(z_noised)
+        return z, z_noised, x_decoded
 
     def call(self, x):
         x = self.encode(x)
@@ -148,6 +146,24 @@ class basic_AE(Model):
 
         return iter_counter
 
+    def call_on_images(self, imgs, labels):
+        ds = tf.data.Dataset.from_tensor_slices((imgs, labels)).batch(1, drop_remainder=True)
+        encodings, noisy_encodings, decoded_images = [], [], np.zeros_like(imgs)
+        i = 0
+        for images, labels in ds:
+            z, z_noised, x_decoded = self.call_noisy(images)
+            encodings.append(z)
+            noisy_encodings.append(z + self.sd_ * np.random.randn(self.latent_))
+            decoded_images[i] = x_decoded
+            i += 1
+        return np.array(encodings).reshape(imgs.shape[0],self.latent_), \
+               np.array(noisy_encodings).reshape(imgs.shape[0],self.latent_), \
+               decoded_images
+
+
+
+
+
 
 class ae_logger():
 
@@ -157,7 +173,7 @@ class ae_logger():
         self.tb_dir = utils.check_dir_exists(tb_dir)
         print("tensorboard logdir: {}".format(self.tb_dir + '/' + self.time_of_creation))
         print("Reminder, to open tensorboard - open the link returned from the "
-              "terminal command: %tensorboard --logdir logs/gradient_tape")
+              "terminal command: %tensorboard --logdir {}".format(self.tb_dir + '/' + self.time_of_creation))
 
         self.loss_func = loss_func
 
@@ -204,13 +220,12 @@ class ae_plotter():
         plt.ylabel('loss')
         plt.show()
 
-    def plot_encodings_2Dlatent(self, model, images=None, labels=None):
+    def plot_encodings_2Dlatent(self, model, encodings=None, labels=None):
 
-        if images is None:
+        if encodings is None:
             encodings, noisy_encodings = np.array(model.encodings), np.array(model.noisy_encodings)
-        else:
-            encodings, noisy_encodings = model.predict(images[:, :, None]), \
-                                         model.predict(images[:, :, None])
+        # else:
+        #     encodings, noisy_encodings = model.encode(encodings), model.encode(encodings)
 
         if labels is None:
             plt.figure()
@@ -234,8 +249,26 @@ class ae_plotter():
             plt.xlabel('x')
             plt.ylabel('y')
             plt.title('')
-            plt.legend()
+            # plt.legend()
             plt.show()
+
+    def plot_before_after(self, images_original, images_decoded):
+        originals_wide = np.hstack(tuple([images_original[i] for i in range(images_original.shape[0])]))
+        decoded_wide = np.hstack(tuple([images_decoded[i] for i in range(images_decoded.shape[0])]))
+        plt.imshow(np.vstack((originals_wide, decoded_wide))[:,:,0])
+        plt.axis('off')
+        plt.show()
+
+        # all_images_stacked = np.concatenate((images_original[:, :, :, 0], images_decoded[:, :, :, 0]))
+        # # grid in matplotlib, taken from https://stackoverflow.com/questions/46615554/how-to-display-multiple-images-in-one-figure-correctly/46616645
+        # fig, ax = plt.subplots(nrows=2, ncols=images_decoded.shape[0])
+        # for i, axi in enumerate(ax.flat):
+        #     img = all_images_stacked[i, :, :]
+        #     axi.imshow(img)
+        # plt.tight_layout(True)
+        # plt.show()
+
+
 
 
 def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE, return_labels=False):
@@ -286,7 +319,8 @@ def load_pre_trained_model(model_class, saved_models_dir, train_ds):
 if __name__ == '__main__':
     EPOCHS = 1
     # train_ds, test_ds = prepare_data_mnist(portion=1)
-    train_ds, test_ds, train, test = prepare_data_mnist(portion=.05, return_labels=True)
+    train_ds, test_ds, train, test = prepare_data_mnist(portion=.1, return_labels=True)
+    images_original, images_labels = tf.convert_to_tensor(train[0][:32]), tf.convert_to_tensor(train[1][:32])
     model = basic_AE()
     model.compile(loss=model.mse_loss, optimizer=model.optimizer)
     tb_dir = utils.check_dir_exists('logs/gradient_tape/' + str(model))
@@ -317,6 +351,17 @@ if __name__ == '__main__':
     # plots
     plotter = ae_plotter()
     plotter.plot_loss(model, logger)
-    # plotter.plot_encodings_2Dlatent(model)
-    plotter.plot_encodings_2Dlatent(model, images=train[0], labels=train[1])
+    n_images = 6
+    indx = np.random.choice(train[0].shape[0], n_images, replace=False)
+    images_original, images_labels = train[0][indx], train[1][indx]
+    encodings, noisy_encodings, images_decoded = model.call_on_images(images_original, images_labels)
+    plotter.plot_before_after(images_original, images_decoded)
+    plotter.plot_encodings_2Dlatent(model, encodings=encodings, labels=np.array(images_labels))
+
+
+
+
+    # for images, labels in train_ds:
+    #     plotter.plot_encodings_2Dlatent(model, images=images, labels=labels)
+    #     break
 

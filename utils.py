@@ -8,7 +8,7 @@ def check_dir_exists(dir_path):
         os.mkdir(dir_path)
         return dir_path
 
-def arr_id(arr, arr_name='_', numpyCreature=1, return_as_str=0):
+def print_arr_id(arr, arr_name='_', numpyCreature=1, return_as_str=0):
     """
     This is a helper function, mostly intended for the coding process alone,
     it prints out a quick recap of properties of the input array
