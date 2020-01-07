@@ -37,45 +37,54 @@ def PCA_privatize(images, latent_dim: int=50, eps: float=.1, ret_latent: bool=Fa
 
 
 if __name__ == '__main__':
-    f_path = "C:/Users/Roy/University/UniGoogleDrive/Studies" \
-             "/Master/project/CelebA/numpy_CelebA/CelebA_c2_100.npy"
-    ims = np.load(f_path)
+    sz = 64
+    f_path1 = "C:/Users/Roy/University/UniGoogleDrive/Studies" \
+             "/Master/project/CelebA/numpy_CelebA/CelebA_c1_{}.npy".format(sz)
+    f_path2 = "C:/Users/Roy/University/UniGoogleDrive/Studies" \
+              "/Master/project/CelebA/numpy_CelebA/CelebA_c2_{}.npy".format(sz)
+    ims1 = np.load(f_path1)
+    ims2 = np.load(f_path2)
+    ims = np.concatenate([ims1, ims2])
+    labels = np.zeros(ims.shape[0])
+    labels[ims1.shape[0]:] = 1
     N = ims.shape[0]
-    ims = ims.reshape((N, 100, 100, 3))
+    ims = ims.reshape((N, sz, sz, 3))
 
-    plt.figure()
-    plt.imshow(mosaic(ims))
-    plt.axis('off')
-    plt.title('original images')
-
-    ims_noised = PCA_privatize(ims, eps=.01)
-    plt.figure()
-    plt.imshow(mosaic(ims_noised))
-    plt.axis('off')
-    plt.title('eps=.01')
-
-    ims_noised = PCA_privatize(ims, eps=.1, latent_dim=150)
-    plt.figure()
-    plt.imshow(mosaic(ims_noised))
-    plt.axis('off')
-    plt.title('eps=.1')
-
-    ims_noised = PCA_privatize(ims, eps=.2, latent_dim=150)
-    plt.figure()
-    plt.imshow(mosaic(ims_noised))
-    plt.axis('off')
-    plt.title('eps=.2')
-
-    ims_noised = PCA_privatize(ims, eps=.5, latent_dim=150)
-    plt.figure()
-    plt.imshow(mosaic(ims_noised))
-    plt.axis('off')
-    plt.title('eps=.5')
+    # plt.figure()
+    # plt.imshow(mosaic(ims))
+    # plt.axis('off')
+    # plt.savefig('PCA/original images.png')
+    #
+    # ims_noised = PCA_privatize(ims, eps=.01)
+    # plt.figure()
+    # plt.imshow(mosaic(ims_noised))
+    # plt.axis('off')
+    # plt.savefig('PCA/eps=01.png')
+    #
+    # ims_noised = PCA_privatize(ims, eps=.1, latent_dim=150)
+    # plt.figure()
+    # plt.imshow(mosaic(ims_noised))
+    # plt.axis('off')
+    # plt.savefig('PCA/eps=1.png')
+    #
+    # ims_noised = PCA_privatize(ims, eps=.2, latent_dim=150)
+    # plt.figure()
+    # plt.imshow(mosaic(ims_noised))
+    # plt.axis('off')
+    # plt.savefig('PCA/eps=2.png')
+    #
+    # ims_noised = PCA_privatize(ims, eps=.5, latent_dim=150)
+    # plt.figure()
+    # plt.imshow(mosaic(ims_noised))
+    # plt.axis('off')
+    # plt.savefig('PCA/eps=5.png')
 
     ims_noised, lat = PCA_privatize(ims, eps=.1, latent_dim=2, ret_latent=True)
     plt.figure()
-    plt.scatter(lat[:, 0], lat[:, 1])
-    plt.axis('off')
-    plt.title('latent')
+    plt.scatter(lat[:, 0], lat[:, 1], c=labels, s=10)
+    plt.xlabel('component 1')
+    plt.ylabel('component 2')
+    plt.grid()
+    plt.savefig('PCA/latent.png')
 
     plt.show()
