@@ -12,7 +12,7 @@ fig_path = '/cs/labs/yweiss/roy.friedmam/DP_project/presentation/'
 
 def conv_autoencoder(data, num_epochs=2, batch_size=32, im_size=28, latent_size=50,
                      save_path=''):
-    (X_train, y_train), (X_test, y_test) = data
+    (X_train, y_train), (X_test, _) = data
 
     encoder = []
 
