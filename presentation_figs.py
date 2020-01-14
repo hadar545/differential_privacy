@@ -74,7 +74,7 @@ def conv_autoencoder(data, num_epochs=10, batch_size=32, im_size=28, latent_size
     plt.savefig(fig_path + 'ae_reconstruction_z{}.png'.format(latent_size))
 
 
-def plot_with_images(X, images, fig, ax, image_num=25):
+def plot_with_images(X, images, fig, ax, image_num=25, x_size=None):
     '''
     A plot function for viewing images in their embedded locations. The
     function receives the embedding (X) and the original images (images) and
@@ -90,8 +90,9 @@ def plot_with_images(X, images, fig, ax, image_num=25):
     n, pixels = np.shape(images)
     img_size = int(pixels**0.5)
 
-    # get the size of the embedded images for plotting:
-    x_size = (max(X[:, 0]) - min(X[:, 0])) * 0.08
+    if x_size is None:
+        # get the size of the embedded images for plotting:
+        x_size = (max(X[:, 0]) - min(X[:, 0])) * 0.08
     # y_size = (max(X[:, 1]) - min(X[:, 1])) * 0.08
     y_size = x_size
 
@@ -241,7 +242,11 @@ def MNIST_AE():
     (X, y), _ = mnist.load_data()
     X = X.astype('float32') / 255
 
-    latent = get_encoded(X[..., None], keras.models.load_model('presentation/autoencoder_z2.h5'))
+    ae2 = keras.models.load_model('presentation/autoencoder_z2.h5')
+    latent = get_encoded(X[..., None], ae2)
+    latent = (latent - np.mean(latent, axis=0)[None, :]) / \
+             np.std(latent - np.mean(latent, axis=0)[None, :], axis=0)[None, :]
+
     plt.figure()
     for i in range(10):
         inds = np.where(y == i)[0]
@@ -253,64 +258,51 @@ def MNIST_AE():
     plt.tight_layout()
     plt.savefig(fig_path + 'MNIST_latent_ae.png')
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111)
-    # plot_with_images(latent[y == 0], flattened[y == 0], fig, ax, image_num=15)
-    # plot_with_images(latent[y == 1], flattened[y == 1], fig, ax, image_num=15)
-    # plt.xlabel('PC 1')
-    # plt.ylabel('PC 2')
-    # plt.savefig(fig_path + 'MNIST_meaning.png')
-    #
-    # ims = []
-    # names = []
-    #
-    # new_inds = np.random.choice(X.shape[0], 10, replace=False)
-    #
-    # ims2 = pca.inverse_transform(latent).reshape(X.shape)[new_inds]
-    # ims.append(mosaic(ims2, normalize=True, cols=1))
-    # names.append('z=2')
-    #
-    # pca5 = PCA(n_components=5)
-    # lat5 = pca5.fit_transform(flattened)
-    # ims5 = pca5.inverse_transform(lat5).reshape(X.shape)[new_inds]
-    # ims.append(mosaic(ims5, normalize=True, cols=1))
-    # names.append('z=5')
-    #
-    # pca25 = PCA(n_components=25)
-    # lat25 = pca25.fit_transform(flattened)
-    # ims25 = pca25.inverse_transform(lat25).reshape(X.shape)[new_inds]
-    # ims.append(mosaic(ims25, normalize=True, cols=1))
-    # names.append('z=25')
-    #
-    # pca50 = PCA(n_components=50)
-    # lat50 = pca50.fit_transform(flattened)
-    # ims50 = pca50.inverse_transform(lat50).reshape(X.shape)[new_inds]
-    # ims.append(mosaic(ims50, normalize=True, cols=1))
-    # names.append('z=50')
-    #
-    # pca150 = PCA(n_components=150)
-    # lat150 = pca150.fit_transform(flattened)
-    # ims150 = pca150.inverse_transform(lat150).reshape(X.shape)[new_inds]
-    # ims.append(mosaic(ims150, normalize=True, cols=1))
-    # names.append('z=150')
-    #
-    # pca500 = PCA(n_components=500)
-    # lat500 = pca500.fit_transform(flattened)
-    # ims500 = pca500.inverse_transform(lat500).reshape(X.shape)[new_inds]
-    # ims.append(mosaic(ims500, normalize=True, cols=1))
-    # names.append('z=500')
-    #
-    # ims.append(mosaic(X[new_inds], normalize=True, cols=1))
-    # names.append('Original')
-    #
-    # plt.figure()
-    # for i, im in enumerate(ims):
-    #     plt.subplot(1, len(ims), i+1)
-    #     plt.imshow(im, cmap='gray')
-    #     plt.axis('off')
-    #     plt.title(names[i])
-    # plt.tight_layout()
-    # plt.savefig(fig_path + 'reconstruction.png')
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    plt.axis('equal')
+    flattened = X.reshape((X.shape[0], np.prod(X.shape[1:])))
+    plot_with_images(latent[y == 6], flattened[y == 6], fig, ax, image_num=15, x_size=.3)
+    plot_with_images(latent[y == 8], flattened[y == 8], fig, ax, image_num=15, x_size=.3)
+    plt.xlabel('z 1')
+    plt.ylabel('z 2')
+    plt.savefig(fig_path + 'MNIST_meaning_ae.png')
+
+    ims = []
+    names = []
+
+    new_inds = np.random.choice(X.shape[0], 10, replace=False)
+
+    ims2 = [im for im in ae2.predict(X[new_inds, ..., None])[:, :, :, 0]]
+    ims.append(mosaic(ims2, normalize=True, cols=1))
+    names.append('z=2')
+
+    ae5 = keras.models.load_model('presentation/autoencoder_z5.h5')
+    ims5 = [im for im in ae5.predict(X[new_inds, ..., None])[:, :, :, 0]]
+    ims.append(mosaic(ims5, normalize=True, cols=1))
+    names.append('z=5')
+
+    ae25 = keras.models.load_model('presentation/autoencoder_z25.h5')
+    ims25 = [im for im in ae25.predict(X[new_inds, ..., None])[:, :, :, 0]]
+    ims.append(mosaic(ims25, normalize=True, cols=1))
+    names.append('z=25')
+
+    ae50 = keras.models.load_model('presentation/autoencoder_z50.h5')
+    ims50 = [im for im in ae50.predict(X[new_inds, ..., None])[:, :, :, 0]]
+    ims.append(mosaic(ims50, normalize=True, cols=1))
+    names.append('z=50')
+
+    ims.append(mosaic(X[new_inds], normalize=True, cols=1))
+    names.append('Original')
+
+    plt.figure()
+    for i, im in enumerate(ims):
+        plt.subplot(1, len(ims), i+1)
+        plt.imshow(im, cmap='gray')
+        plt.axis('off')
+        plt.title(names[i])
+    plt.tight_layout()
+    plt.savefig(fig_path + 'reconstruction_ae.png')
 
 
 if __name__ == '__main__':
@@ -329,7 +321,7 @@ if __name__ == '__main__':
     train_amnt, test_amnt = 60000, 1000
     data = ((X_train[:train_amnt], y_train[:train_amnt]),
             (X_test[:test_amnt], y_test[:test_amnt]))
-    conv_autoencoder(data, num_epochs=20, latent_size=2, batch_size=16)
+    # conv_autoencoder(data, num_epochs=20, latent_size=2, batch_size=16)
     # conv_autoencoder(data, num_epochs=10, latent_size=5, batch_size=32)
     # conv_autoencoder(data, num_epochs=10, latent_size=25, batch_size=32)
     # conv_autoencoder(data, num_epochs=10, latent_size=50, batch_size=32)
