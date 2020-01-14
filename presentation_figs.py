@@ -7,85 +7,71 @@ from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, UpSampling2D, Res
 from keras.utils import np_utils
 
 
-fig_path = '/cs/labs/yweiss/roy.friedmam/DP_project/presentation/'
+fig_path = 'presentation/'
 
 
-def conv_autoencoder(data, num_epochs=2, batch_size=32, im_size=28, latent_size=50,
-                     save_path=''):
+def get_encoded(data, model):
+    encoder = keras.models.Model(inputs=model.input,
+                                 outputs=model.get_layer('dense_1').output)
+    return encoder.predict(data)
+
+
+def conv_autoencoder(data, num_epochs=10, batch_size=32, im_size=28, latent_size=50):
     (X_train, y_train), (X_test, _) = data
-
-    encoder = []
-
+    activ = 'relu'
     inp = keras.layers.Input((im_size, im_size, 1))
     # encoder
-    encoder.append(Conv2D(8, kernel_size=(5, 5), activation='relu', padding='same'))
-    encoder.append(MaxPooling2D(pool_size=(2, 2)))
-    encoder.append(Conv2D(16, kernel_size=(5, 5), activation='relu', padding='same'))
-    encoder.append(MaxPooling2D(pool_size=(2, 2)))
-    encoder.append(Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same'))
-    encoder.append(Conv2D(16, kernel_size=(3, 3), activation='relu', padding='same'))
-    encoder.append(Conv2D(4, kernel_size=(2, 2), activation='relu', padding='same'))
-    encoder.append(Flatten())
-    # encoder.append(Dense(latent_size, activation='relu', activity_regularizer=keras.regularizers.l2(10e-3)))
-    encoder.append(Dense(latent_size, activation='relu'))
+    E0 = Conv2D(8, kernel_size=(5, 5), activation=activ, padding='same')(inp)
+    E1 = MaxPooling2D(pool_size=(2, 2))(E0)
+    E2 = Conv2D(16, kernel_size=(5, 5), activation=activ, padding='same')(E1)
+    E3 = MaxPooling2D(pool_size=(2, 2))(E2)
+    E4 = Conv2D(16, kernel_size=(3, 3), activation=activ, padding='same')(E3)
+    # E5 = Conv2D(16, kernel_size=(3, 3), activation='relu', padding='same')(E4)
+    # E6 = Conv2D(4, kernel_size=(2, 2), activation='relu', padding='same')(E5)
+    # E7 = Flatten()(E6)
+    E7 = Flatten()(E4)
+    # E_fin = Dense(latent_size, activation='relu', activity_regularizer=keras.regularizers.l2(10e-3))(E7)
+    E_fin = Dense(latent_size, activation=activ)(E7)
 
     # decoder
-    decoder = []
-    decoder.append(Dense(196, activation='relu'))
-    decoder.append(Reshape((7, 7, 4)))
-    decoder.append(Conv2D(4, kernel_size=(2, 2), activation='relu', padding='same'))
-    decoder.append(Conv2D(16, kernel_size=(3, 3), activation='relu', padding='same'))
-    decoder.append(Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same'))
-    decoder.append(UpSampling2D(size=(2, 2)))
-    decoder.append(Conv2D(16, kernel_size=(3, 3), activation='relu', padding='same'))
-    decoder.append(UpSampling2D(size=(2, 2)))
-    decoder.append(Conv2D(8, kernel_size=(3, 3), activation='relu', padding='same'))
-    decoder.append(Conv2D(1, kernel_size=(2, 2), activation='relu', padding='same'))
+    # D0 = Dense(196, activation='relu')(E_fin)
+    D0 = Dense(7*7*16, activation=activ)(E_fin)
+    # D1 = Reshape((7, 7, 4))(D0)
+    D1 = Reshape((7, 7, 16))(D0)
+    # D2 = Conv2D(4, kernel_size=(2, 2), activation='relu', padding='same')(D1)
+    # D3 = Conv2D(16, kernel_size=(3, 3), activation='relu', padding='same')(D2)
+    # D4 = Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same')(D3)
+    D4 = Conv2D(16, kernel_size=(3, 3), activation=activ, padding='same')(D1)
+    D5 = UpSampling2D(size=(2, 2))(D4)
+    D6 = Conv2D(8, kernel_size=(5, 5), activation=activ, padding='same')(D5)
+    D7 = UpSampling2D(size=(2, 2))(D6)
+    D_fin = Conv2D(1, kernel_size=(5, 5), activation=activ, padding='same')(D7)
 
-    x = inp
-    for e in encoder:
-        x = e(x)
-    for d in decoder:
-        x = d(x)
-
-    model = keras.models.Model(inputs=inp, outputs=x)
-    model.compile(loss='mse', metrics=['loss'],
-                  optimizer='adam')
+    model = keras.models.Model(inputs=inp, outputs=D_fin)
+    model.compile(loss='mse', optimizer='adam')
     model.summary()
-    # keras.utils.plot_model(model, 'conv_autoencoder_model.png', show_shapes=True, show_layer_names=False)
+    model.fit(X_train[..., np.newaxis], X_train[..., np.newaxis],
+              batch_size=batch_size, epochs=num_epochs,
+              validation_data=(X_test[..., np.newaxis], X_test[..., np.newaxis]), verbose=2)
 
-    # encoder_hist = model.fit(X_train[..., np.newaxis], X_train[..., np.newaxis],
-    #                          batch_size=batch_size, epochs=num_epochs,
-    #                          validation_data=(X_test[..., np.newaxis], X_test[..., np.newaxis]), verbose=2)
-    #
-    # model.save(save_path + 'autoencoder.h5')
-    #
-    # encoder = keras.models.Model(inputs=inp, outputs=E_fin)
-    # encoder.compile(loss='mse', metrics='loss', optimizer='adam')
-    # encoder.save(save_path + 'encoder.h5')
-    #
-    # d_inp = keras.layers.Input((latent_size, 1))
-    # decoder = keras.models.Model(inputs=D_inp, outputs=D_fin)
-    # decoder.compile(loss='mse', metrics='loss', optimizer='adam')
-    # decoder.save(save_path + 'decoder.h5')
-    #
-    # ims = X_train[:25]
+    model.save(fig_path + 'autoencoder_z{}.h5'.format(latent_size))
+    ims = X_train[:25]
     # plt.figure()
     # for i in range(25):
     #     plt.subplot(5, 5, i+1)
     #     plt.imshow(ims[i], cmap='gray')
     #     plt.axis('off')
     # plt.tight_layout(h_pad=0, w_pad=0)
-    # plt.savefig('orignals.png')
-    #
-    # recon = model.predict(ims[:, :, :, None])[:, :, :, 0]
-    # plt.figure()
-    # for i in range(25):
-    #     plt.subplot(5, 5, i + 1)
-    #     plt.imshow(recon[i], cmap='gray')
-    #     plt.axis('off')
-    # plt.tight_layout(h_pad=0, w_pad=0)
-    # plt.savefig('reconstruction.png')
+    # plt.savefig(fig_path + 'ae_orignals_z{}.png'.format(latent_size))
+
+    recon = model.predict(ims[:, :, :, None])[:, :, :, 0]
+    plt.figure()
+    for i in range(25):
+        plt.subplot(5, 5, i + 1)
+        plt.imshow(recon[i], cmap='gray')
+        plt.axis('off')
+    plt.tight_layout(h_pad=0, w_pad=0)
+    plt.savefig(fig_path + 'ae_reconstruction_z{}.png'.format(latent_size))
 
 
 def plot_with_images(X, images, fig, ax, image_num=25):
@@ -124,12 +110,10 @@ def plot_with_images(X, images, fig, ax, image_num=25):
     return fig
 
 
-def _factors(num: int):
-    return np.where((num % np.arange(1, np.floor(np.sqrt(num) + 1))) == 0)[0] + 1
-
-
 def mosaic(images, reshape: tuple=None, gap: int=1,
            normalize: bool=True, clip: bool=False, cols: int=-1):
+    def _factors(num: int):
+        return np.where((num % np.arange(1, np.floor(np.sqrt(num) + 1))) == 0)[0] + 1
     if cols > 0: assert len(images) % cols == 0, 'Bad number of columns given to mosaic'
     else: cols = len(images)//_factors(len(images))[-1]
     ims = images
@@ -253,6 +237,82 @@ def MNIST_PCA():
     plt.savefig(fig_path + 'reconstruction.png')
 
 
+def MNIST_AE():
+    (X, y), _ = mnist.load_data()
+    X = X.astype('float32') / 255
+
+    latent = get_encoded(X[..., None], keras.models.load_model('presentation/autoencoder_z2.h5'))
+    plt.figure()
+    for i in range(10):
+        inds = np.where(y == i)[0]
+        inds = np.random.choice(inds, 300, replace=False)
+        plt.scatter(latent[inds, 0], latent[inds, 1], s=10, label=str(i))
+    plt.xlabel('z_1')
+    plt.ylabel('z_2')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(fig_path + 'MNIST_latent_ae.png')
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111)
+    # plot_with_images(latent[y == 0], flattened[y == 0], fig, ax, image_num=15)
+    # plot_with_images(latent[y == 1], flattened[y == 1], fig, ax, image_num=15)
+    # plt.xlabel('PC 1')
+    # plt.ylabel('PC 2')
+    # plt.savefig(fig_path + 'MNIST_meaning.png')
+    #
+    # ims = []
+    # names = []
+    #
+    # new_inds = np.random.choice(X.shape[0], 10, replace=False)
+    #
+    # ims2 = pca.inverse_transform(latent).reshape(X.shape)[new_inds]
+    # ims.append(mosaic(ims2, normalize=True, cols=1))
+    # names.append('z=2')
+    #
+    # pca5 = PCA(n_components=5)
+    # lat5 = pca5.fit_transform(flattened)
+    # ims5 = pca5.inverse_transform(lat5).reshape(X.shape)[new_inds]
+    # ims.append(mosaic(ims5, normalize=True, cols=1))
+    # names.append('z=5')
+    #
+    # pca25 = PCA(n_components=25)
+    # lat25 = pca25.fit_transform(flattened)
+    # ims25 = pca25.inverse_transform(lat25).reshape(X.shape)[new_inds]
+    # ims.append(mosaic(ims25, normalize=True, cols=1))
+    # names.append('z=25')
+    #
+    # pca50 = PCA(n_components=50)
+    # lat50 = pca50.fit_transform(flattened)
+    # ims50 = pca50.inverse_transform(lat50).reshape(X.shape)[new_inds]
+    # ims.append(mosaic(ims50, normalize=True, cols=1))
+    # names.append('z=50')
+    #
+    # pca150 = PCA(n_components=150)
+    # lat150 = pca150.fit_transform(flattened)
+    # ims150 = pca150.inverse_transform(lat150).reshape(X.shape)[new_inds]
+    # ims.append(mosaic(ims150, normalize=True, cols=1))
+    # names.append('z=150')
+    #
+    # pca500 = PCA(n_components=500)
+    # lat500 = pca500.fit_transform(flattened)
+    # ims500 = pca500.inverse_transform(lat500).reshape(X.shape)[new_inds]
+    # ims.append(mosaic(ims500, normalize=True, cols=1))
+    # names.append('z=500')
+    #
+    # ims.append(mosaic(X[new_inds], normalize=True, cols=1))
+    # names.append('Original')
+    #
+    # plt.figure()
+    # for i, im in enumerate(ims):
+    #     plt.subplot(1, len(ims), i+1)
+    #     plt.imshow(im, cmap='gray')
+    #     plt.axis('off')
+    #     plt.title(names[i])
+    # plt.tight_layout()
+    # plt.savefig(fig_path + 'reconstruction.png')
+
+
 if __name__ == '__main__':
     # MNIST_PCA()
 
@@ -266,7 +326,11 @@ if __name__ == '__main__':
     y_train = np_utils.to_categorical(y_train, n_classes)
     y_test = np_utils.to_categorical(y_test, n_classes)
 
-    train_amnt, test_amnt = 6000, 1000
+    train_amnt, test_amnt = 60000, 1000
     data = ((X_train[:train_amnt], y_train[:train_amnt]),
             (X_test[:test_amnt], y_test[:test_amnt]))
-    conv_autoencoder(data)
+    conv_autoencoder(data, num_epochs=20, latent_size=2, batch_size=16)
+    # conv_autoencoder(data, num_epochs=10, latent_size=5, batch_size=32)
+    # conv_autoencoder(data, num_epochs=10, latent_size=25, batch_size=32)
+    # conv_autoencoder(data, num_epochs=10, latent_size=50, batch_size=32)
+    MNIST_AE()
