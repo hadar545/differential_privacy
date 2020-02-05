@@ -114,7 +114,9 @@ class basic_AE(Model):
         print('saved encodings at ' + save_dir)
 
     def save(self, model_title):
-        model.save_weights(model_title, save_format='tf')
+        # model.save_weights(model_title, save_format='tf')
+        # Model.save_weights(model_title, save_format='tf')
+        self.save_weights(model_title, save_format='tf')
         print('saved model: ' + model_title)
 
     def train_epoch(self, train_ds, test_ds, logger, iter_counter_start=0, epoch_counter=0):
@@ -133,7 +135,7 @@ class basic_AE(Model):
                     self.test_step(test_images)
 
                 logger.log(iter_counter, images, reconstructions, test_images, test_reconstructions)
-                print('Step {}, Loss: {}, Test Loss: {}'.format(iter_counter, self.train_loss.result(), self.test_loss.result()))
+                # print('Step {}, Loss: {}, Test Loss: {}'.format(iter_counter, self.train_loss.result(), self.test_loss.result()))
 
             iter_counter += 1
 
@@ -150,22 +152,23 @@ class basic_AE(Model):
     def call_on_images(self, imgs, labels=None):
 
         encodings, noisy_encodings, decoded_images = [], [], np.zeros_like(imgs)
-        i = 0
+        curr_i = 0
         def run(images):
             z, z_noised, x_decoded = self.call_noisy(images)
             encodings.append(z)
             noisy_encodings.append(z + self.sd_ * np.random.randn(self.latent_))
-            decoded_images[i] = x_decoded
-            i += 1
+            decoded_images[curr_i] = x_decoded
 
         if labels is None:
             ds = tf.data.Dataset.from_tensor_slices(imgs).batch(1, drop_remainder=True)
             for images in ds:
                 run(images)
+                curr_i += 1
         else:
             ds = tf.data.Dataset.from_tensor_slices((imgs, labels)).batch(1, drop_remainder=True)
             for images, labels in ds:
                 run(images)
+                curr_i += 1
 
         return np.array(encodings).reshape(imgs.shape[0],self.latent_), \
                np.array(noisy_encodings).reshape(imgs.shape[0],self.latent_), \
@@ -327,10 +330,10 @@ def load_pre_trained_model(model_class, saved_models_dir, train_ds):
     return model_class(), None, 0, 0
 
 
-if __name__ == '__main__':
-    EPOCHS = 7
+def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
+    EPOCHS = epochs
     # train_ds, test_ds = prepare_data_mnist(portion=1)
-    train_ds, test_ds, train, test = prepare_data_mnist(portion=0.1, return_labels=True)
+    train_ds, test_ds, train, test = prepare_data_mnist(portion=mnist_portion, return_labels=True)
     images_original, images_labels = tf.convert_to_tensor(train[0][:32]), tf.convert_to_tensor(train[1][:32])
     model = basic_AE()
     model.compile(loss=model.mse_loss, optimizer=model.optimizer)
@@ -340,11 +343,12 @@ if __name__ == '__main__':
     epoch_counter, iter_counter = 0, 0
 
     # load pre-trained models
-    use_pretrained = 1
     pre_trained_epochs, pre_trained_model_path = 0, None  # number of epochs this model already trained for
     if use_pretrained:
         saved_models_dir = utils.check_dir_exists('models/' + str(model))
-        model, pre_trained_model_path, pre_trained_epochs, iter_counter = load_pre_trained_model(basic_AE, saved_models_dir, train_ds)
+        model, pre_trained_model_path, pre_trained_epochs, iter_counter = load_pre_trained_model(basic_AE,
+                                                                                                 saved_models_dir,
+                                                                                                 train_ds)
     if pre_trained_model_path is None:
         print('(did not use any pre-trained model)')
     else:
@@ -353,7 +357,8 @@ if __name__ == '__main__':
 
     # train epochs
     for epoch in range(EPOCHS):
-        iter_counter = model.train_epoch(train_ds, test_ds, logger, iter_counter_start=iter_counter, epoch_counter=epoch_counter)
+        iter_counter = model.train_epoch(train_ds, test_ds, logger, iter_counter_start=iter_counter,
+                                         epoch_counter=epoch_counter)
         epoch_counter += 1
 
     # save model
@@ -361,7 +366,7 @@ if __name__ == '__main__':
     model.save(model_title)
 
     # plots
-    if 0:
+    if do_plot:
         plotter = ae_plotter()
         plotter.plot_loss(model, logger)
         n_images = 10
@@ -371,17 +376,15 @@ if __name__ == '__main__':
         plotter.plot_before_after(images_original, images_decoded)
         plotter.plot_encodings_2Dlatent(model, encodings=encodings, labels=np.array(images_labels))
 
+    return model
 
 
-    # for images, labels in train_ds:
-    #     plotter.plot_encodings_2Dlatent(model, images=images, labels=labels)
-    #     break
 
-# finished epoch 14, Step 2618, Loss: 0.04205966740846634, Test Loss: 0.04324441775679588
-# saved model: models/basic_AE_z3/model_at_epoch_14_iter_2618
+model = main_mnist(epochs=1, mnist_portion=0.1, use_pretrained=1, do_plot=0)
 
-# finished epoch 7, Step 1309, Loss: 0.04657045751810074, Test Loss: 0.04678208380937576
-# saved model: models/basic_AE_z3/model_at_epoch_7_iter_1309
-
-# finished epoch 7, Step 2618, Loss: 0.04348893463611603, Test Loss: 0.04404647275805473
-# saved model: models/basic_AE_z3/model_at_epoch_14_iter_2618
+# going manual:
+train_ds, test_ds, train, test = prepare_data_mnist(portion=0.05, return_labels=True)
+n_images = 10
+indx = np.random.choice(train[0].shape[0], n_images, replace=False)
+images_original, images_labels = train[0][indx], train[1][indx]
+encodings, noisy_encodings, images_decoded = model.call_on_images(images_original, images_labels)
