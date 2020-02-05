@@ -40,6 +40,19 @@ class basic_AE(Model):
     def __str__(self):
         return 'basic_AE_z{}'.format(self.latent_)
 
+    def _create_encoder(self) -> list:
+        layers = []
+        layers.append(Conv2D(8, 3, activation='relu', padding='same'))
+        layers.append(MaxPooling2D())
+        layers.append(Conv2D(16, 3, activation='relu', padding='same'))
+        layers.append(MaxPooling2D())
+        layers.append(Conv2D(8, 3, activation='relu', padding='same'))
+        layers.append(Conv2D(4, 3, activation='relu', padding='same'))
+        layers.append(Flatten())
+        layers.append(Dense(self.latent_, activation='linear',
+                            activity_regularizer=tf.keras.regularizers.l2(self.lambda_)))
+        return layers
+
     def _create_decoder(self) -> list:
         layers = []
         layers.append(InputLayer((28,28,1)))
@@ -52,19 +65,6 @@ class basic_AE(Model):
         layers.append(Conv2D(8, 3, activation='relu', padding='same'))
         layers.append(UpSampling2D())
         layers.append(Conv2D(1, 3, activation='relu', padding='same'))
-        return layers
-
-    def _create_encoder(self) -> list:
-        layers = []
-        layers.append(Conv2D(8, 3, activation='relu', padding='same'))
-        layers.append(MaxPooling2D())
-        layers.append(Conv2D(16, 3, activation='relu', padding='same'))
-        layers.append(MaxPooling2D())
-        layers.append(Conv2D(8, 3, activation='relu', padding='same'))
-        layers.append(Conv2D(4, 3, activation='relu', padding='same'))
-        layers.append(Flatten())
-        layers.append(Dense(self.latent_, activation='linear',
-                            activity_regularizer=tf.keras.regularizers.l2(self.lambda_)))
         return layers
 
     def call_noisy(self, x):
@@ -178,7 +178,6 @@ class basic_AE(Model):
 
 
 
-
 class ae_logger():
 
     def __init__(self, tb_dir, loss_func):
@@ -284,7 +283,6 @@ class ae_plotter():
 
 
 
-
 def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE, return_labels=False):
 
     mnist = tf.keras.datasets.mnist
@@ -334,7 +332,7 @@ def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
     EPOCHS = epochs
     # train_ds, test_ds = prepare_data_mnist(portion=1)
     train_ds, test_ds, train, test = prepare_data_mnist(portion=mnist_portion, return_labels=True)
-    images_original, images_labels = tf.convert_to_tensor(train[0][:32]), tf.convert_to_tensor(train[1][:32])
+    # images_original, images_labels = tf.convert_to_tensor(train[0][:32]), tf.convert_to_tensor(train[1][:32])
     model = basic_AE()
     model.compile(loss=model.mse_loss, optimizer=model.optimizer)
     tb_dir = utils.check_dir_exists('logs/gradient_tape/' + str(model))
@@ -380,11 +378,192 @@ def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
 
 
 
-model = main_mnist(epochs=1, mnist_portion=0.1, use_pretrained=1, do_plot=0)
+# model = main_mnist(epochs=1, mnist_portion=0.1, use_pretrained=1, do_plot=0)
+#
+# train_ds, test_ds, train, test = prepare_data_mnist(portion=0.05, return_labels=True)
+# n_images = 10
+# indx = np.random.choice(train[0].shape[0], n_images, replace=False)
+# images_original, images_labels = train[0][indx], train[1][indx]
+# # encodings, noisy_encodings, images_decoded = model.call_on_images(images_original, images_labels)
+# encodings, noisy_encodings, images_decoded = model.call_on_images(images_original)
 
-# going manual:
-train_ds, test_ds, train, test = prepare_data_mnist(portion=0.05, return_labels=True)
-n_images = 10
-indx = np.random.choice(train[0].shape[0], n_images, replace=False)
-images_original, images_labels = train[0][indx], train[1][indx]
-encodings, noisy_encodings, images_decoded = model.call_on_images(images_original, images_labels)
+
+
+
+
+class celebA_AE(basic_AE):
+
+    def __init__(self, lambda_: float=.001, latent_: int=LATENT_SIZE,  sd_: float=.1, save_encodings=True,
+                 learning_rate=LEARNING_RATE):
+        super(celebA_AE, self).__init__(lambda_, latent_,  sd_, save_encodings, learning_rate)
+
+    def __str__(self):
+        return 'celebA_AE_z{}'.format(self.latent_)
+
+    def _create_encoder(self) -> list:  # 128*128*3
+        layers = []
+        layers.append(InputLayer((128, 128, 3)))
+        layers.append(Conv2D(8, 7, activation='relu', padding='same'))
+        layers.append(MaxPooling2D())   # 64*64*8
+        layers.append(Conv2D(16, 5, activation='relu', padding='same'))
+        layers.append(MaxPooling2D())   # 32*32*16
+        layers.append(Conv2D(32, 3, activation='relu', padding='same'))
+        layers.append(MaxPooling2D())  # 16*16*32
+        layers.append(Conv2D(32, 3, activation='relu', padding='same'))
+        layers.append(MaxPooling2D())  # 8*8*32
+        layers.append(Conv2D(32, 3, activation='relu', padding='same'))
+        layers.append(MaxPooling2D())  # 4*4*32 = 512
+        layers.append(Flatten())
+        layers.append(Dense(self.latent_, activation='linear',
+                            activity_regularizer=tf.keras.regularizers.l2(self.lambda_)))
+        return layers
+
+    def _create_decoder(self) -> list:
+        layers = []
+        # layers.append(InputLayer((128,128,3))) # todo
+        # layers.append(InputLayer((self.latent_,1)))
+        layers.append(Dense(512, activation='relu'))
+        layers.append(Reshape((4,4,32)))
+        layers.append(UpSampling2D())   # 8*8*32
+        layers.append(Conv2D(32, 3, activation='relu', padding='same'))
+        layers.append(UpSampling2D()) # 16*16*32
+        layers.append(Conv2D(32, 3, activation='relu', padding='same'))
+        layers.append(UpSampling2D())   #32*32*32
+        layers.append(Conv2D(16, 3, activation='relu', padding='same'))
+        layers.append(UpSampling2D())   #64*64*16
+        layers.append(Conv2D(8, 5, activation='relu', padding='same')) # 64*64*8
+        layers.append(UpSampling2D())   #128*128*8
+        layers.append(Conv2D(3, 7, activation='relu', padding='same'))  #128*128*3
+        return layers
+
+
+def prepare_data_celebA(portion=1.0, batch_size=BATCH_SIZE, train_portion=0.9):
+    all_images = np.load('data/full128_10k.npy').astype(np.float32) / 255.0
+    indx = np.random.choice(all_images.shape[0], int(portion * all_images.shape[0]), replace=False)
+    train_indx = indx[:int(train_portion * indx.shape[0])]
+    test_indx = indx[int(train_portion * indx.shape[0]):]
+
+    # Use tf.data to batch and shuffle the dataset:
+    train_ds = tf.data.Dataset.from_tensor_slices((all_images[train_indx], np.zeros(train_indx.shape[0]))).shuffle(10000).batch(batch_size, drop_remainder=True)
+    test_ds = tf.data.Dataset.from_tensor_slices((all_images[test_indx], np.zeros(test_indx.shape[0]))).batch(batch_size, drop_remainder=True)
+    return train_ds, test_ds
+
+
+def mosaic(images: list, reshape: tuple=None, gap: int=1,
+           normalize: bool=True, clip: bool=False, cols: int=-1):
+    """
+    :param images:
+    :param reshape:
+    :param gap:
+    :param normalize:
+    :param clip:
+    :param cols:
+    :return:
+    """
+    def _factors(num: int):
+        return np.where((num % np.arange(1, np.floor(np.sqrt(num) + 1))) == 0)[0] + 1
+
+    if cols > 0: assert len(images) % cols == 0, 'Bad number of columns given to mosaic'
+    else: cols = len(images)//_factors(len(images))[-1]
+    ims = images
+
+    if normalize:
+        ims = [(I-np.min(I))/(np.max(I)-np.min(I)) if np.max(I)!=np.min(I) else I for I in ims]
+
+    if clip:
+        ims = [np.clip(I, 0, 1) for I in ims]
+
+    if reshape is not None:
+        ims = [I.reshape(reshape) for I in ims]
+
+    max_val = np.max(ims) if not clip else np.max(ims)/np.max(ims)
+
+    if gap > 0:
+        sh = (ims[0].shape[0], gap) if ims[0].ndim < 3 else (ims[0].shape[0], gap, 3)
+        ims = [np.concatenate([max_val * np.ones(sh), I], axis=1) for I in ims]
+
+    rows = [np.concatenate(ims[i*cols: (i+1)*cols], axis=1) for i in range(len(ims)//cols)]
+
+    if gap > 0:
+        sh = (gap, rows[0].shape[1]) if rows[0].ndim < 3 else (gap, rows[0].shape[1], 3)
+        rows = [np.concatenate([max_val * np.ones(sh), I], axis=0) for I in rows]
+
+    ret = np.concatenate(rows, axis=0)
+
+    if gap > 0:
+        sh = (gap, ret.shape[1]) if ims[0].ndim < 3 else (gap, ret.shape[1], 3)
+        ret = np.concatenate([ret, max_val * np.ones(sh)], axis=0)
+        sh = (ret.shape[0], gap) if ims[0].ndim < 3 else (ret.shape[0], gap, 3)
+        ret = np.concatenate([ret, max_val * np.ones(sh)], axis=1)
+
+    return ret
+
+
+def main_AE(model_class, train_ds, test_ds, epochs=1, use_pretrained=0, do_plot=0):
+    EPOCHS = epochs
+    model = model_class()
+    model.compile(loss=model.mse_loss, optimizer=model.optimizer)
+    tb_dir = utils.check_dir_exists('logs/gradient_tape/' + str(model))
+    saved_models_dir = utils.check_dir_exists('models/' + str(model))
+    logger = ae_logger(tb_dir, model.mse_loss)
+    epoch_counter, iter_counter = 0, 0
+
+    # load pre-trained models
+    pre_trained_epochs, pre_trained_model_path = 0, None  # number of epochs this model already trained for
+    if use_pretrained:
+        saved_models_dir = utils.check_dir_exists('models/' + str(model))
+        model, pre_trained_model_path, pre_trained_epochs, iter_counter = load_pre_trained_model(model_class, saved_models_dir, train_ds)
+    if pre_trained_model_path is None:
+        print('(did not use any pre-trained model)')
+    else:
+        print('loaded model: ' + saved_models_dir + '/' + pre_trained_model_path)
+        logger = ae_logger(tb_dir, model.mse_loss)
+
+    # train epochs
+    for epoch in range(EPOCHS):
+        iter_counter = model.train_epoch(train_ds, test_ds, logger, iter_counter_start=iter_counter, epoch_counter=epoch_counter)
+        epoch_counter += 1
+
+    # save model
+    model_title = saved_models_dir + '/model_at_epoch_{}_iter_{}'.format(pre_trained_epochs + EPOCHS, iter_counter)
+    model.save(model_title)
+
+    # plots
+    if do_plot:
+        plotter = ae_plotter()
+        plotter.plot_loss(model, logger)
+        n_images = 10
+        indx = np.random.choice(test_ds.shape[0], n_images, replace=False)
+        images_original = test_ds[indx]
+        encodings, noisy_encodings, images_decoded = model.call_on_images(images_original)
+        plotter.plot_before_after(images_original, images_decoded)
+
+    return model
+
+
+
+
+
+# train_ds, test_ds, train, test = prepare_data_mnist(portion=0.05, return_labels=True)
+# model = main_AE(basic_AE, train_ds, test_ds, epochs=1, use_pretrained=0, do_plot=0)
+#
+# n_images = 10
+# indx = np.random.choice(train[0].shape[0], n_images, replace=False)
+# images_original = train[0][indx]
+# encodings, noisy_encodings, images_decoded = model.call_on_images(images_original)
+
+all_images = np.load('data/full128_10k.npy').astype(np.float32) / 255.0
+indx = np.random.choice(all_images.shape[0], 100, replace=False)
+celeb_mosaic = mosaic(list(all_images[indx]),normalize=False, cols=10)
+plt.imshow(celeb_mosaic)
+plt.show()
+
+# train_ds, test_ds = prepare_data_celebA(portion=0.2)
+# model = main_AE(celebA_AE, train_ds, test_ds, epochs=3, use_pretrained=0, do_plot=0)
+#
+# n_images = 10
+# indx = np.random.choice(test_ds.shape[0], n_images, replace=False)
+# images_original = test_ds[indx]
+# encodings, noisy_encodings, images_decoded = model.call_on_images(images_original)
+
+
