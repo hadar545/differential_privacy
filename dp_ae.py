@@ -13,7 +13,7 @@ import utils
 EPOCHS = 0
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001
-LATENT_SIZE = 2
+LATENT_SIZE = 3
 
 
 class basic_AE(Model):
@@ -133,6 +133,7 @@ class basic_AE(Model):
                     self.test_step(test_images)
 
                 logger.log(iter_counter, images, reconstructions, test_images, test_reconstructions)
+                print('Step {}, Loss: {}, Test Loss: {}'.format(iter_counter, self.train_loss.result(), self.test_loss.result()))
 
             iter_counter += 1
 
@@ -146,16 +147,26 @@ class basic_AE(Model):
 
         return iter_counter
 
-    def call_on_images(self, imgs, labels):
-        ds = tf.data.Dataset.from_tensor_slices((imgs, labels)).batch(1, drop_remainder=True)
+    def call_on_images(self, imgs, labels=None):
+
         encodings, noisy_encodings, decoded_images = [], [], np.zeros_like(imgs)
         i = 0
-        for images, labels in ds:
+        def run(images):
             z, z_noised, x_decoded = self.call_noisy(images)
             encodings.append(z)
             noisy_encodings.append(z + self.sd_ * np.random.randn(self.latent_))
             decoded_images[i] = x_decoded
             i += 1
+
+        if labels is None:
+            ds = tf.data.Dataset.from_tensor_slices(imgs).batch(1, drop_remainder=True)
+            for images in ds:
+                run(images)
+        else:
+            ds = tf.data.Dataset.from_tensor_slices((imgs, labels)).batch(1, drop_remainder=True)
+            for images, labels in ds:
+                run(images)
+
         return np.array(encodings).reshape(imgs.shape[0],self.latent_), \
                np.array(noisy_encodings).reshape(imgs.shape[0],self.latent_), \
                decoded_images
@@ -193,7 +204,7 @@ class ae_logger():
         train_loss, test_loss = self.loss_func(images), self.loss_func(test_images)
         self.train_loss_log.append(train_loss)
         self.test_loss_log.append(test_loss)
-        with self.test_summary_writer.as_default():
+        with self.train_summary_writer.as_default():
             # tf.summary.scalar('loss', self.train_loss.result(), step=iter)
             tf.summary.scalar('loss', train_loss, step=iter)
             tf.summary.image('original', images, max_outputs=10, step=iter)
@@ -297,7 +308,7 @@ def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE, return_labels=False):
 def load_pre_trained_model(model_class, saved_models_dir, train_ds):
     saved_models = [x.split('.')[0] for x in os.listdir(saved_models_dir) if x.endswith('.index')]
     if len(saved_models):
-        saved_models.sort()
+        saved_models.sort(key=lambda p: int(p.split('_')[-1]))
         pre_trained_model_path = saved_models[-1]
         full_pre_trained_model_path = saved_models_dir + '/' + pre_trained_model_path
         print("full_pre_trained_model_path = ", full_pre_trained_model_path)
@@ -317,9 +328,9 @@ def load_pre_trained_model(model_class, saved_models_dir, train_ds):
 
 
 if __name__ == '__main__':
-    EPOCHS = 1
+    EPOCHS = 7
     # train_ds, test_ds = prepare_data_mnist(portion=1)
-    train_ds, test_ds, train, test = prepare_data_mnist(portion=.1, return_labels=True)
+    train_ds, test_ds, train, test = prepare_data_mnist(portion=0.1, return_labels=True)
     images_original, images_labels = tf.convert_to_tensor(train[0][:32]), tf.convert_to_tensor(train[1][:32])
     model = basic_AE()
     model.compile(loss=model.mse_loss, optimizer=model.optimizer)
@@ -329,8 +340,8 @@ if __name__ == '__main__':
     epoch_counter, iter_counter = 0, 0
 
     # load pre-trained models
-    use_pretrained, pre_trained_model_path = 0, None
-    pre_trained_epochs = 0  # number of epochs this model already trained for
+    use_pretrained = 1
+    pre_trained_epochs, pre_trained_model_path = 0, None  # number of epochs this model already trained for
     if use_pretrained:
         saved_models_dir = utils.check_dir_exists('models/' + str(model))
         model, pre_trained_model_path, pre_trained_epochs, iter_counter = load_pre_trained_model(basic_AE, saved_models_dir, train_ds)
@@ -338,6 +349,7 @@ if __name__ == '__main__':
         print('(did not use any pre-trained model)')
     else:
         print('loaded model: ' + saved_models_dir + '/' + pre_trained_model_path)
+        logger = ae_logger(tb_dir, model.mse_loss)
 
     # train epochs
     for epoch in range(EPOCHS):
@@ -349,15 +361,15 @@ if __name__ == '__main__':
     model.save(model_title)
 
     # plots
-    plotter = ae_plotter()
-    plotter.plot_loss(model, logger)
-    n_images = 6
-    indx = np.random.choice(train[0].shape[0], n_images, replace=False)
-    images_original, images_labels = train[0][indx], train[1][indx]
-    encodings, noisy_encodings, images_decoded = model.call_on_images(images_original, images_labels)
-    plotter.plot_before_after(images_original, images_decoded)
-    plotter.plot_encodings_2Dlatent(model, encodings=encodings, labels=np.array(images_labels))
-
+    if 0:
+        plotter = ae_plotter()
+        plotter.plot_loss(model, logger)
+        n_images = 10
+        indx = np.random.choice(train[0].shape[0], n_images, replace=False)
+        images_original, images_labels = train[0][indx], train[1][indx]
+        encodings, noisy_encodings, images_decoded = model.call_on_images(images_original, images_labels)
+        plotter.plot_before_after(images_original, images_decoded)
+        plotter.plot_encodings_2Dlatent(model, encodings=encodings, labels=np.array(images_labels))
 
 
 
@@ -365,3 +377,11 @@ if __name__ == '__main__':
     #     plotter.plot_encodings_2Dlatent(model, images=images, labels=labels)
     #     break
 
+# finished epoch 14, Step 2618, Loss: 0.04205966740846634, Test Loss: 0.04324441775679588
+# saved model: models/basic_AE_z3/model_at_epoch_14_iter_2618
+
+# finished epoch 7, Step 1309, Loss: 0.04657045751810074, Test Loss: 0.04678208380937576
+# saved model: models/basic_AE_z3/model_at_epoch_7_iter_1309
+
+# finished epoch 7, Step 2618, Loss: 0.04348893463611603, Test Loss: 0.04404647275805473
+# saved model: models/basic_AE_z3/model_at_epoch_14_iter_2618
