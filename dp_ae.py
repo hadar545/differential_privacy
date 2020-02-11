@@ -11,27 +11,27 @@ import sys
 import utils
 
 
-EPOCHS = 0
+EPOCHS = 1
 LAMBDA = 0.00001
+LATENT_SIZE = 2
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001
-LATENT_SIZE = 2
 
 
 class basic_AE(Model):
 
-    def __init__(self, lambda_: float=LAMBDA, latent_: int=LATENT_SIZE,  sd_: float=.1, save_encodings=True,
-                 learning_rate=LEARNING_RATE):
+    def __init__(self, sd_: float=.1, save_encodings=True, learning_rate=LEARNING_RATE):
         super(basic_AE, self).__init__()
 
-        self.latent_ = latent_
+        global LAMBDA, LATENT_SIZE
+        self.lambda_, self.latent_ = LAMBDA, LATENT_SIZE
+
         self.sd_ = sd_
         self.save_encodings = save_encodings
 
         self.encodings = []
         self.noisy_encodings = []
 
-        self.lambda_ = lambda_
         self.encoding_layers = self._create_encoder()
         self.decoding_layers = self._create_decoder()
 
@@ -189,7 +189,7 @@ class ae_logger():
         self.time_of_creation = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.tb_dir = utils.check_dir_exists(tb_dir)
         print("tensorboard logdir: {}".format(self.tb_dir + '/' + self.time_of_creation))
-        print("Reminder, to open tensorboard - open the link returned from the "
+        print("     Reminder, to open tensorboard - open the link returned from the "
               "terminal command: %tensorboard --logdir {}".format(self.tb_dir + '/' + self.time_of_creation))
 
         self.loss_func = loss_func
@@ -343,25 +343,6 @@ def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE, return_labels=False):
 
 
 def load_pre_trained_model(model_class, saved_models_dir, train_ds):
-    # saved_models = [x.split('.')[0] for x in os.listdir(saved_models_dir) if x.endswith('.index')]
-    # if len(saved_models):
-    #     saved_models.sort(key=lambda p: int(p.split('_')[-1]))
-    #     pre_trained_model_path = saved_models[-1]
-    #     full_pre_trained_model_path = saved_models_dir + '/' + pre_trained_model_path
-    #     print("full_pre_trained_model_path = ", full_pre_trained_model_path)
-    #
-    #     model = model_class()
-    #     model.compile(loss=model.mse_loss, optimizer=model.optimizer)
-    #     # run a single step in order to initialize the model (necessary before loading weights)
-    #     for images, _ in train_ds:
-    #         model.train_step(images)
-    #         break
-    #
-    #     model.load_weights(full_pre_trained_model_path)
-    #     pre_trained_epochs = int(pre_trained_model_path.split('_')[-3])  # -3 because model_title later on
-    #     iter_counter = int(pre_trained_model_path.split('_')[-1])  # -1 because model_title later on
-    #     return model, pre_trained_model_path, pre_trained_epochs, iter_counter
-    # return model_class(), None, 0, 0
     saved_models = [x for x in os.listdir(saved_models_dir) if os.path.isdir(saved_models_dir + '/' + x)]
     if len(saved_models):
         saved_models.sort(key=lambda p: int(p.split('iter')[-1].split('_')[0])) # based on the model titles format of: '/model_at_epoch{}_iter{}_date{}' we want to sort by iteration
@@ -405,7 +386,7 @@ def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
                                                                                                  saved_models_dir,
                                                                                                  train_ds)
     if pre_trained_model_path is None:
-        print('(did not use any pre-trained model)')
+        print('did not use any pre-trained model.')
     else:
         print('loaded model: ' + saved_models_dir + '/' + pre_trained_model_path)
         logger = ae_logger(tb_dir, model.mse_loss)
@@ -450,9 +431,8 @@ def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
 
 class celebA_AE(basic_AE):
 
-    def __init__(self, lambda_: float=LAMBDA, latent_: int=LATENT_SIZE,  sd_: float=.1, save_encodings=True,
-                 learning_rate=LEARNING_RATE):
-        super(celebA_AE, self).__init__(lambda_, latent_,  sd_, save_encodings, learning_rate)
+    def __init__(self,  sd_: float=.1, save_encodings=True, learning_rate=LEARNING_RATE):
+        super(celebA_AE, self).__init__(sd_, save_encodings, learning_rate)
 
     def __str__(self):
         return 'celebA_AE_z{}_la{}'.format(self.latent_, self.lambda_)
@@ -558,10 +538,7 @@ def mosaic(images: list, reshape: tuple=None, gap: int=1,
     return ret
 
 
-def main_AE(model_class, train_ds, test_ds, epochs=1, latent_size=2, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=0):
-    global EPOCHS, LATENT_SIZE
-    EPOCHS = epochs
-    LATENT_SIZE = latent_size
+def main_AE(model_class, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=0):
 
     model = model_class()
     model.compile(loss=model.mse_loss, optimizer=model.optimizer)
@@ -591,8 +568,6 @@ def main_AE(model_class, train_ds, test_ds, epochs=1, latent_size=2, use_pretrai
         if do_plot:
             plotter.plot_before_after(model, save_later=1, iter=iter_counter)
 
-    saved_model_title = lambda epochs, iters: 'model_at_epoch{}_iter{}_'.format(epochs, iters)
-
     # save model
     model_dir = saved_models_dir + '/model_at_epoch{}_iter{}_date{}'.format(pre_trained_epochs + EPOCHS, iter_counter, datetime.datetime.now().strftime('%d%m%Y-%H%M'))
     if do_save:
@@ -609,6 +584,17 @@ def main_AE(model_class, train_ds, test_ds, epochs=1, latent_size=2, use_pretrai
 
 
 
+
+
+
+
+
+
+################# main #################
+
+EPOCHS = 2
+LAMBDA = 0.00001
+LATENT_SIZE = 2
 
 # # run on MNIST
 # train_ds, test_ds, train, test = prepare_data_mnist(portion=0.05, return_labels=True)
@@ -627,8 +613,16 @@ def main_AE(model_class, train_ds, test_ds, epochs=1, latent_size=2, use_pretrai
 # plt.imshow(celeb_mosaic)
 # plt.show()
 
-
 # run on celebA
-train_ds, test_ds = prepare_data_celebA(portion=1)
-model = main_AE(celebA_AE, train_ds, test_ds, epochs=10, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
+train_ds, test_ds = prepare_data_celebA(portion=0.05)
+# model = main_AE(celebA_AE, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
+
+latent_sizes = [2,20,50,100]
+lambdas = [0.001, 0.0001, 0.00001, 0.000001]
+for z in latent_sizes:
+    for l in lambdas:
+        # global LATENT_SIZE, LAMBDA
+        LATENT_SIZE, LAMBDA = z, l
+        print('\n'*5, "*** LATENT_SIZE={}  LAMBDA={} ***".format(LATENT_SIZE, LAMBDA))
+        model = main_AE(celebA_AE, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
 
