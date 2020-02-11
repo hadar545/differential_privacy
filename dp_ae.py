@@ -6,19 +6,21 @@ import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, Reshape, UpSampling2D, InputLayer
 from tensorflow.keras import Model
 import datetime
+import sys
 
 import utils
 
 
 EPOCHS = 0
+LAMBDA = 0.00001
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001
-LATENT_SIZE = 3
+LATENT_SIZE = 2
 
 
 class basic_AE(Model):
 
-    def __init__(self, lambda_: float=.001, latent_: int=LATENT_SIZE,  sd_: float=.1, save_encodings=True,
+    def __init__(self, lambda_: float=LAMBDA, latent_: int=LATENT_SIZE,  sd_: float=.1, save_encodings=True,
                  learning_rate=LEARNING_RATE):
         super(basic_AE, self).__init__()
 
@@ -38,7 +40,7 @@ class basic_AE(Model):
         self.test_loss = tf.keras.metrics.Mean(name='test_loss')
 
     def __str__(self):
-        return 'basic_AE_z{}'.format(self.latent_)
+        return 'basic_AE_z{}_la{}'.format(self.latent_, self.lambda_)
 
     def _create_encoder(self) -> list:
         layers = []
@@ -109,15 +111,14 @@ class basic_AE(Model):
         self.test_loss.reset_states()
 
     def save_encodings_npy(self, save_dir):
-        np.save(save_dir + '/encodings', np.array(self.encodings))
-        np.save(save_dir + '/noisy_encodings', np.array(self.noisy_encodings))
+        np.save(save_dir + '/encodings.npy', np.array(self.encodings))
+        np.save(save_dir + '/encodings_noisy_sd{}.npy'.format(self.sd_), np.array(self.noisy_encodings))
         print('saved encodings at ' + save_dir)
 
-    def save(self, model_title):
-        # model.save_weights(model_title, save_format='tf')
-        # Model.save_weights(model_title, save_format='tf')
-        self.save_weights(model_title, save_format='tf')
-        print('saved model: ' + model_title)
+    def save(self, model_dir):
+        model_path = model_dir + '/model_weights'
+        self.save_weights(model_path, save_format='tf')
+        print('saved model at: ' + model_dir)
 
     def train_epoch(self, train_ds, test_ds, logger, iter_counter_start=0, epoch_counter=0):
 
@@ -135,14 +136,15 @@ class basic_AE(Model):
                     self.test_step(test_images)
 
                 logger.log(iter_counter, images, reconstructions, test_images, test_reconstructions)
-                # print('Step {}, Loss: {}, Test Loss: {}'.format(iter_counter, self.train_loss.result(), self.test_loss.result()))
+                print('     Step {}, Loss: {}, Test Loss: {}'.format(iter_counter, self.train_loss.result(), self.test_loss.result()))
 
             iter_counter += 1
 
-        template = 'finished epoch {}, Step {}, Loss: {}, Test Loss: {}'
+        template = 'finished epoch {}, Step {}, Loss: {:.5f}, Test Loss: {:.5f}     [time stamp: {}]'
         print(template.format(epoch_counter + 1, iter_counter,
                               self.train_loss.result(),
-                              self.test_loss.result()))
+                              self.test_loss.result(),
+                              datetime.datetime.now().strftime("%H:%M:%S")))
 
         # Reset the metrics for the next epoch
         self.reset_metrics()
@@ -174,6 +176,8 @@ class basic_AE(Model):
                np.array(noisy_encodings).reshape(imgs.shape[0],self.latent_), \
                decoded_images
 
+    def run_noisy_and_create_new_ds(self):
+        pass
 
 
 
@@ -221,9 +225,10 @@ class ae_logger():
 class ae_plotter():
 
     def __init__(self):
-        pass
+        self.images_before = None
+        self.final_before_after_images_to_save_later = []
 
-    def plot_loss(self, model, logger):
+    def plot_loss(self, model, logger, do_save=1, save_dir=None, iter=None):
         plt.figure()
         plt.title(str(model) + ' - Loss per step\n' + logger.time_of_creation)
         plt.plot(logger.iter_log, logger.train_loss_log, 'b', label='train')
@@ -231,6 +236,14 @@ class ae_plotter():
         plt.legend()
         plt.xlabel('iteration')
         plt.ylabel('loss')
+
+        if do_save:
+            if save_dir is not None:
+                path_to_save = save_dir+'/loss.png'
+                if iter is not None:
+                    path_to_save = save_dir+'/loss_iter{}.png'.format(iter)
+                plt.savefig(path_to_save)
+
         plt.show()
 
     def plot_encodings_2Dlatent(self, model, encodings=None, labels=None):
@@ -265,22 +278,45 @@ class ae_plotter():
             # plt.legend()
             plt.show()
 
-    def plot_before_after(self, images_original, images_decoded):
-        originals_wide = np.hstack(tuple([images_original[i] for i in range(images_original.shape[0])]))
-        decoded_wide = np.hstack(tuple([images_decoded[i] for i in range(images_decoded.shape[0])]))
-        plt.imshow(np.vstack((originals_wide, decoded_wide))[:,:,0])
+    def plot_before_after(self, model, single_color=0, save_dir=None, iter=None, n_images=10, do_save=1, save_later=0):
+
+        if self.images_before is None:
+            indx = np.random.choice(BATCH_SIZE, n_images, replace=False)
+            for imgs, _ in test_ds:
+                self.images_before = np.array(imgs)[indx]
+                break
+        encodings, noisy_encodings, images_after = model.call_on_images(self.images_before)
+
+        originals_wide = np.hstack(tuple([self.images_before[i] for i in range(self.images_before.shape[0])]))
+        decoded_wide = np.hstack(tuple([images_after[i] for i in range(images_after.shape[0])]))
+        before_after = np.clip(np.vstack((originals_wide, decoded_wide))[:,:,0 if single_color else 0:3], 0,1)
+        plt.imshow(before_after)
         plt.axis('off')
+
+        path_to_save = 'before_after.png'
+        if save_dir is not None:
+            path_to_save = save_dir + '/before_after.png'
+            if iter is not None:
+                path_to_save = save_dir + '/before_after_iter{}.png'.format(iter)
+
+        if save_later:
+            self.final_before_after_images_to_save_later.append((iter, before_after))
+
+        if do_save and not save_later:
+            plt.imsave(path_to_save, before_after)
+
         plt.show()
 
-        # all_images_stacked = np.concatenate((images_original[:, :, :, 0], images_decoded[:, :, :, 0]))
-        # # grid in matplotlib, taken from https://stackoverflow.com/questions/46615554/how-to-display-multiple-images-in-one-figure-correctly/46616645
-        # fig, ax = plt.subplots(nrows=2, ncols=images_decoded.shape[0])
-        # for i, axi in enumerate(ax.flat):
-        #     img = all_images_stacked[i, :, :]
-        #     axi.imshow(img)
-        # plt.tight_layout(True)
-        # plt.show()
+    def save_all_the_save_later(self, save_dir):
 
+        np.save(save_dir + '/images_before.npy', self.images_before)
+
+        for t in self.final_before_after_images_to_save_later:
+            iter, before_after = t[0], t[1]
+            path_to_save = save_dir + '/before_after.png'
+            if iter is not None:
+                path_to_save = save_dir + '/before_after_iter{}.png'.format(iter)
+            plt.imsave(path_to_save, before_after)
 
 
 def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE, return_labels=False):
@@ -307,11 +343,30 @@ def prepare_data_mnist(portion=1.0, batch_size=BATCH_SIZE, return_labels=False):
 
 
 def load_pre_trained_model(model_class, saved_models_dir, train_ds):
-    saved_models = [x.split('.')[0] for x in os.listdir(saved_models_dir) if x.endswith('.index')]
+    # saved_models = [x.split('.')[0] for x in os.listdir(saved_models_dir) if x.endswith('.index')]
+    # if len(saved_models):
+    #     saved_models.sort(key=lambda p: int(p.split('_')[-1]))
+    #     pre_trained_model_path = saved_models[-1]
+    #     full_pre_trained_model_path = saved_models_dir + '/' + pre_trained_model_path
+    #     print("full_pre_trained_model_path = ", full_pre_trained_model_path)
+    #
+    #     model = model_class()
+    #     model.compile(loss=model.mse_loss, optimizer=model.optimizer)
+    #     # run a single step in order to initialize the model (necessary before loading weights)
+    #     for images, _ in train_ds:
+    #         model.train_step(images)
+    #         break
+    #
+    #     model.load_weights(full_pre_trained_model_path)
+    #     pre_trained_epochs = int(pre_trained_model_path.split('_')[-3])  # -3 because model_title later on
+    #     iter_counter = int(pre_trained_model_path.split('_')[-1])  # -1 because model_title later on
+    #     return model, pre_trained_model_path, pre_trained_epochs, iter_counter
+    # return model_class(), None, 0, 0
+    saved_models = [x for x in os.listdir(saved_models_dir) if os.path.isdir(saved_models_dir + '/' + x)]
     if len(saved_models):
-        saved_models.sort(key=lambda p: int(p.split('_')[-1]))
+        saved_models.sort(key=lambda p: int(p.split('iter')[-1].split('_')[0])) # based on the model titles format of: '/model_at_epoch{}_iter{}_date{}' we want to sort by iteration
         pre_trained_model_path = saved_models[-1]
-        full_pre_trained_model_path = saved_models_dir + '/' + pre_trained_model_path
+        full_pre_trained_model_path = saved_models_dir + '/' + saved_models[-1] + '/model_weights'
         print("full_pre_trained_model_path = ", full_pre_trained_model_path)
 
         model = model_class()
@@ -322,10 +377,12 @@ def load_pre_trained_model(model_class, saved_models_dir, train_ds):
             break
 
         model.load_weights(full_pre_trained_model_path)
-        pre_trained_epochs = int(pre_trained_model_path.split('_')[-3])  # -3 because model_title later on
-        iter_counter = int(pre_trained_model_path.split('_')[-1])  # -1 because model_title later on
+        pre_trained_epochs = int(pre_trained_model_path.split('epoch')[-1].split('_')[0])
+        iter_counter = int(pre_trained_model_path.split('iter')[-1].split('_')[0])
         return model, pre_trained_model_path, pre_trained_epochs, iter_counter
     return model_class(), None, 0, 0
+
+
 
 
 def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
@@ -393,12 +450,12 @@ def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
 
 class celebA_AE(basic_AE):
 
-    def __init__(self, lambda_: float=.001, latent_: int=LATENT_SIZE,  sd_: float=.1, save_encodings=True,
+    def __init__(self, lambda_: float=LAMBDA, latent_: int=LATENT_SIZE,  sd_: float=.1, save_encodings=True,
                  learning_rate=LEARNING_RATE):
         super(celebA_AE, self).__init__(lambda_, latent_,  sd_, save_encodings, learning_rate)
 
     def __str__(self):
-        return 'celebA_AE_z{}'.format(self.latent_)
+        return 'celebA_AE_z{}_la{}'.format(self.latent_, self.lambda_)
 
     def _create_encoder(self) -> list:  # 128*128*3
         layers = []
@@ -414,6 +471,7 @@ class celebA_AE(basic_AE):
         layers.append(Conv2D(32, 3, activation='relu', padding='same'))
         layers.append(MaxPooling2D())  # 4*4*32 = 512
         layers.append(Flatten())
+        layers.append(Dense(100, activation='relu'))
         layers.append(Dense(self.latent_, activation='linear',
                             activity_regularizer=tf.keras.regularizers.l2(self.lambda_)))
         return layers
@@ -422,6 +480,7 @@ class celebA_AE(basic_AE):
         layers = []
         # layers.append(InputLayer((128,128,3))) # todo
         # layers.append(InputLayer((self.latent_,1)))
+        layers.append(Dense(100, activation='relu'))
         layers.append(Dense(512, activation='relu'))
         layers.append(Reshape((4,4,32)))
         layers.append(UpSampling2D())   # 8*8*32
@@ -499,13 +558,17 @@ def mosaic(images: list, reshape: tuple=None, gap: int=1,
     return ret
 
 
-def main_AE(model_class, train_ds, test_ds, epochs=1, use_pretrained=0, do_plot=0):
+def main_AE(model_class, train_ds, test_ds, epochs=1, latent_size=2, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=0):
+    global EPOCHS, LATENT_SIZE
     EPOCHS = epochs
+    LATENT_SIZE = latent_size
+
     model = model_class()
     model.compile(loss=model.mse_loss, optimizer=model.optimizer)
     tb_dir = utils.check_dir_exists('logs/gradient_tape/' + str(model))
     saved_models_dir = utils.check_dir_exists('models/' + str(model))
     logger = ae_logger(tb_dir, model.mse_loss)
+    plotter = ae_plotter()
     epoch_counter, iter_counter = 0, 0
 
     # load pre-trained models
@@ -516,34 +579,38 @@ def main_AE(model_class, train_ds, test_ds, epochs=1, use_pretrained=0, do_plot=
     if pre_trained_model_path is None:
         print('(did not use any pre-trained model)')
     else:
-        print('loaded model: ' + saved_models_dir + '/' + pre_trained_model_path)
+        pre_trained_model_path_full = saved_models_dir + '/' + pre_trained_model_path
+        print('loaded model: ' + pre_trained_model_path_full)
         logger = ae_logger(tb_dir, model.mse_loss)
+        plotter.images_before = np.load(pre_trained_model_path_full + '/' + 'images_before.npy')
 
     # train epochs
     for epoch in range(EPOCHS):
         iter_counter = model.train_epoch(train_ds, test_ds, logger, iter_counter_start=iter_counter, epoch_counter=epoch_counter)
         epoch_counter += 1
+        if do_plot:
+            plotter.plot_before_after(model, save_later=1, iter=iter_counter)
+
+    saved_model_title = lambda epochs, iters: 'model_at_epoch{}_iter{}_'.format(epochs, iters)
 
     # save model
-    model_title = saved_models_dir + '/model_at_epoch_{}_iter_{}'.format(pre_trained_epochs + EPOCHS, iter_counter)
-    model.save(model_title)
+    model_dir = saved_models_dir + '/model_at_epoch{}_iter{}_date{}'.format(pre_trained_epochs + EPOCHS, iter_counter, datetime.datetime.now().strftime('%d%m%Y-%H%M'))
+    if do_save:
+        model.save(model_dir)
+    if do_save_encodings:
+        model.save_encodings_npy(model_dir)
 
     # plots
     if do_plot:
-        plotter = ae_plotter()
-        plotter.plot_loss(model, logger)
-        n_images = 10
-        indx = np.random.choice(test_ds.shape[0], n_images, replace=False)
-        images_original = test_ds[indx]
-        encodings, noisy_encodings, images_decoded = model.call_on_images(images_original)
-        plotter.plot_before_after(images_original, images_decoded)
+        plotter.plot_loss(model, logger, do_save=do_save, save_dir=model_dir, iter=iter_counter)
+        plotter.save_all_the_save_later(save_dir=model_dir)
 
     return model
 
 
 
 
-
+# # run on MNIST
 # train_ds, test_ds, train, test = prepare_data_mnist(portion=0.05, return_labels=True)
 # model = main_AE(basic_AE, train_ds, test_ds, epochs=1, use_pretrained=0, do_plot=0)
 #
@@ -552,18 +619,16 @@ def main_AE(model_class, train_ds, test_ds, epochs=1, use_pretrained=0, do_plot=
 # images_original = train[0][indx]
 # encodings, noisy_encodings, images_decoded = model.call_on_images(images_original)
 
-all_images = np.load('data/full128_10k.npy').astype(np.float32) / 255.0
-indx = np.random.choice(all_images.shape[0], 100, replace=False)
-celeb_mosaic = mosaic(list(all_images[indx]),normalize=False, cols=10)
-plt.imshow(celeb_mosaic)
-plt.show()
 
-# train_ds, test_ds = prepare_data_celebA(portion=0.2)
-# model = main_AE(celebA_AE, train_ds, test_ds, epochs=3, use_pretrained=0, do_plot=0)
-#
-# n_images = 10
-# indx = np.random.choice(test_ds.shape[0], n_images, replace=False)
-# images_original = test_ds[indx]
-# encodings, noisy_encodings, images_decoded = model.call_on_images(images_original)
+# # Mosaic for celebA
+# all_images = np.load('data/full128_10k.npy').astype(np.float32) / 255.0
+# indx = np.random.choice(all_images.shape[0], 100, replace=False)
+# celeb_mosaic = mosaic(list(all_images[indx]),normalize=False, cols=10)
+# plt.imshow(celeb_mosaic)
+# plt.show()
 
+
+# run on celebA
+train_ds, test_ds = prepare_data_celebA(portion=1)
+model = main_AE(celebA_AE, train_ds, test_ds, epochs=10, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
 
