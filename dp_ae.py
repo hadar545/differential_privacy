@@ -180,8 +180,6 @@ class basic_AE(Model):
         pass
 
 
-
-
 class ae_logger():
 
     def __init__(self, tb_dir, loss_func):
@@ -364,8 +362,6 @@ def load_pre_trained_model(model_class, saved_models_dir, train_ds):
     return model_class(), None, 0, 0
 
 
-
-
 def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
     EPOCHS = epochs
     # train_ds, test_ds = prepare_data_mnist(portion=1)
@@ -416,14 +412,6 @@ def main_mnist(epochs=3, mnist_portion=1, use_pretrained=1, do_plot=1):
 
 
 
-# model = main_mnist(epochs=1, mnist_portion=0.1, use_pretrained=1, do_plot=0)
-#
-# train_ds, test_ds, train, test = prepare_data_mnist(portion=0.05, return_labels=True)
-# n_images = 10
-# indx = np.random.choice(train[0].shape[0], n_images, replace=False)
-# images_original, images_labels = train[0][indx], train[1][indx]
-# # encodings, noisy_encodings, images_decoded = model.call_on_images(images_original, images_labels)
-# encodings, noisy_encodings, images_decoded = model.call_on_images(images_original)
 
 
 
@@ -488,56 +476,6 @@ def prepare_data_celebA(portion=1.0, batch_size=BATCH_SIZE, train_portion=0.9):
     return train_ds, test_ds
 
 
-def mosaic(images: list, reshape: tuple=None, gap: int=1,
-           normalize: bool=True, clip: bool=False, cols: int=-1):
-    """
-    :param images:
-    :param reshape:
-    :param gap:
-    :param normalize:
-    :param clip:
-    :param cols:
-    :return:
-    """
-    def _factors(num: int):
-        return np.where((num % np.arange(1, np.floor(np.sqrt(num) + 1))) == 0)[0] + 1
-
-    if cols > 0: assert len(images) % cols == 0, 'Bad number of columns given to mosaic'
-    else: cols = len(images)//_factors(len(images))[-1]
-    ims = images
-
-    if normalize:
-        ims = [(I-np.min(I))/(np.max(I)-np.min(I)) if np.max(I)!=np.min(I) else I for I in ims]
-
-    if clip:
-        ims = [np.clip(I, 0, 1) for I in ims]
-
-    if reshape is not None:
-        ims = [I.reshape(reshape) for I in ims]
-
-    max_val = np.max(ims) if not clip else np.max(ims)/np.max(ims)
-
-    if gap > 0:
-        sh = (ims[0].shape[0], gap) if ims[0].ndim < 3 else (ims[0].shape[0], gap, 3)
-        ims = [np.concatenate([max_val * np.ones(sh), I], axis=1) for I in ims]
-
-    rows = [np.concatenate(ims[i*cols: (i+1)*cols], axis=1) for i in range(len(ims)//cols)]
-
-    if gap > 0:
-        sh = (gap, rows[0].shape[1]) if rows[0].ndim < 3 else (gap, rows[0].shape[1], 3)
-        rows = [np.concatenate([max_val * np.ones(sh), I], axis=0) for I in rows]
-
-    ret = np.concatenate(rows, axis=0)
-
-    if gap > 0:
-        sh = (gap, ret.shape[1]) if ims[0].ndim < 3 else (gap, ret.shape[1], 3)
-        ret = np.concatenate([ret, max_val * np.ones(sh)], axis=0)
-        sh = (ret.shape[0], gap) if ims[0].ndim < 3 else (ret.shape[0], gap, 3)
-        ret = np.concatenate([ret, max_val * np.ones(sh)], axis=1)
-
-    return ret
-
-
 def main_AE(model_class, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=0):
 
     model = model_class()
@@ -588,11 +526,62 @@ def main_AE(model_class, train_ds, test_ds, use_pretrained=0, do_save=1, do_save
 
 
 
+def mosaic(images: list, reshape: tuple=None, gap: int=1,
+           normalize: bool=True, clip: bool=False, cols: int=-1):
+    """
+    :param images:
+    :param reshape:
+    :param gap:
+    :param normalize:
+    :param clip:
+    :param cols:
+    :return:
+    """
+    def _factors(num: int):
+        return np.where((num % np.arange(1, np.floor(np.sqrt(num) + 1))) == 0)[0] + 1
+
+    if cols > 0: assert len(images) % cols == 0, 'Bad number of columns given to mosaic'
+    else: cols = len(images)//_factors(len(images))[-1]
+    ims = images
+
+    if normalize:
+        ims = [(I-np.min(I))/(np.max(I)-np.min(I)) if np.max(I)!=np.min(I) else I for I in ims]
+
+    if clip:
+        ims = [np.clip(I, 0, 1) for I in ims]
+
+    if reshape is not None:
+        ims = [I.reshape(reshape) for I in ims]
+
+    max_val = np.max(ims) if not clip else np.max(ims)/np.max(ims)
+
+    if gap > 0:
+        sh = (ims[0].shape[0], gap) if ims[0].ndim < 3 else (ims[0].shape[0], gap, 3)
+        ims = [np.concatenate([max_val * np.ones(sh), I], axis=1) for I in ims]
+
+    rows = [np.concatenate(ims[i*cols: (i+1)*cols], axis=1) for i in range(len(ims)//cols)]
+
+    if gap > 0:
+        sh = (gap, rows[0].shape[1]) if rows[0].ndim < 3 else (gap, rows[0].shape[1], 3)
+        rows = [np.concatenate([max_val * np.ones(sh), I], axis=0) for I in rows]
+
+    ret = np.concatenate(rows, axis=0)
+
+    if gap > 0:
+        sh = (gap, ret.shape[1]) if ims[0].ndim < 3 else (gap, ret.shape[1], 3)
+        ret = np.concatenate([ret, max_val * np.ones(sh)], axis=0)
+        sh = (ret.shape[0], gap) if ims[0].ndim < 3 else (ret.shape[0], gap, 3)
+        ret = np.concatenate([ret, max_val * np.ones(sh)], axis=1)
+
+    return ret
+
+
+
 
 
 ################# main #################
 
-EPOCHS = 2
+EPOCHS = 10
 LAMBDA = 0.00001
 LATENT_SIZE = 2
 
@@ -614,7 +603,7 @@ LATENT_SIZE = 2
 # plt.show()
 
 # run on celebA
-train_ds, test_ds = prepare_data_celebA(portion=0.05)
+train_ds, test_ds = prepare_data_celebA(portion=1)
 # model = main_AE(celebA_AE, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
 
 latent_sizes = [2,20,50,100]
