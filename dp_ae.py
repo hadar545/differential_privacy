@@ -610,7 +610,6 @@ latent_sizes = [2,20,50,100]
 lambdas = [0.001, 0.0001, 0.00001, 0.000001]
 for z in latent_sizes:
     for l in lambdas:
-        # global LATENT_SIZE, LAMBDA
         LATENT_SIZE, LAMBDA = z, l
         print('\n'*5, "*** LATENT_SIZE={}  LAMBDA={} ***".format(LATENT_SIZE, LAMBDA))
         model = main_AE(celebA_AE, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
