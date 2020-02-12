@@ -655,7 +655,7 @@ def mosaic(images: list, reshape: tuple=None, gap: int=1,
 
 ################# main #################
 
-EPOCHS = 1
+EPOCHS = 10
 LAMBDA = 0.00001
 LATENT_SIZE = 50
 
@@ -683,7 +683,7 @@ train_ds, test_ds = prepare_data_celebA(portion=1)
 # model, model_dir = main_AE(celebA_AE, train_ds, test_ds, use_pretrained=1, do_training=0)
 # model.run_noisy_and_create_new_ds(test_ds, model_dir)
 
-latent_sizes = [2,20,50,100]
+latent_sizes = [100, 2, 20, 50]
 lambdas = [0.0001, 0.00001, 0.000001]
 for z in latent_sizes:
     for l in lambdas:
