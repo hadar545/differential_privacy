@@ -677,7 +677,7 @@ LATENT_SIZE = 50
 # plt.show()
 
 # run on celebA
-train_ds, test_ds = prepare_data_celebA(portion=0.1)
+train_ds, test_ds = prepare_data_celebA(portion=1)
 # model, model_dir = main_AE(celebA_AE_BN, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
 
 # model, model_dir = main_AE(celebA_AE, train_ds, test_ds, use_pretrained=1, do_training=0)
