@@ -684,7 +684,7 @@ train_ds, test_ds = prepare_data_celebA(portion=1)
 # model.run_noisy_and_create_new_ds(test_ds, model_dir)
 
 latent_sizes = [100, 2, 20, 50]
-lambdas = [0.0001, 0.00001, 0.000001]
+lambdas = [0.000001, 0.00001, 0.0001]
 for z in latent_sizes:
     for l in lambdas:
         LATENT_SIZE, LAMBDA = z, l
