@@ -163,6 +163,28 @@ class pPCA:
             return Z, Z_noise, self.decode(Z_noise)
         return self.decode(Z_noise)
 
+    def prop_privatize(self, X: np.ndarray, noise: float=.1, return_encodings: bool=False):
+        """
+        Privatize the datapoints in X by using a DP Gaussian Mechanism on the latent encodings of X as
+        trained by the model. If the model was not trained before trying to privatize X, it will be trained.
+        :param X: a numpy array with dimensions [N, ...] where N is the number of samples to fit to
+        :param noise: the amount of noise to add to the encodings using the Gaussian mechanism on the
+                      latent encodings of the data
+        :param return_encodings: a boolean indicating whether the encodings and their noisy representations
+                                 should be returned as well
+        :return: if return_encodings=False, only the privatized images as a [N, ...] dimensional numpy array is
+                 returned (where '...' stands for the original shape of each image). Otherwise, Z, Z_noisy and
+                 the privatized images are returned, where Z are the original encodings, Z_noisy are the noised
+                 encodings and both Z as well as Z_noisy have the dimensions of [N, latent_dim]
+        """
+        assert 0 < noise < 1
+        if self._trained: Z = self.encode(X)
+        else: Z = self.fit_transform(X)
+        Z_noise = (1-noise)*Z + noise*np.random.randn(Z.shape[0], Z.shape[1])
+        if return_encodings:
+            return Z, Z_noise, self.decode(Z_noise)
+        return self.decode(Z_noise)
+
     def save(self, path: str=None):
         """
         Saves a pPCA model
@@ -195,6 +217,7 @@ class pPCA:
             mod._d, mod._shape = params['d'], params['shape']
             mod.mu, mod.W, mod.phi = params['mu'], params['W'], params['phi']
             mod._update_M()
+            mod._trained = True
             return mod
         except:
             raise Exception('Either the path {} is not a saved pPCA model or '
@@ -214,30 +237,41 @@ if __name__ == '__main__':
     labels[ims1.shape[0]:] = 1
     N = ims.shape[0]
     ims = ims.reshape((N, sz, sz, 3))
-    mod = pPCA(latent_dim=256).fit(ims)
+    # mod = pPCA(latent_dim=256).fit(ims)
+    # mod.save()
 
+    mod = pPCA.load('pPCA_z256.pkl')
     en = mod.encode(ims)
     ch = np.random.choice(en.shape[0], 2, replace=False)
-    interp = np.array([(1-a)*en[ch[0]] + a*en[ch[1]] for a in np.linspace(0, 1.1, 50)])
     part = ims[:50]
-    noised = mod.privatize(part, noise=1)
+    noise = .5
+    noised = mod.privatize(part, noise=noise)
+    prop_noised = mod.prop_privatize(part, noise=noise)
+
+    # interp = np.array([(1-a)*en[ch[0]] + a*en[ch[1]] for a in np.linspace(0, 1.1, 50)])
+    # plt.figure()
+    # plt.imshow(mosaic(mod.decode(interp), normalize=False, clip=True))
+    # plt.axis('off')
+    # plt.show()
+
     plt.figure()
-    plt.imshow(mosaic(mod.decode(interp), normalize=False, clip=True))
+    plt.imshow(mosaic(part, normalize=False))
     plt.axis('off')
+    plt.title('original images')
+
+    plt.figure()
+    plt.imshow(mosaic(mod.decode(mod.encode(part)), normalize=False, clip=True))
+    plt.axis('off')
+    plt.title('reconstructed images')
+
+    plt.figure()
+    plt.imshow(mosaic(noised, normalize=False, clip=True))
+    plt.axis('off')
+    plt.title('privatized images')
     plt.show()
 
-    # plt.figure()
-    # plt.imshow(mosaic(part, normalize=False))
-    # plt.axis('off')
-    # plt.title('original images')
-    #
-    # plt.figure()
-    # plt.imshow(mosaic(mod.decode(mod.encode(part)), normalize=False, clip=True))
-    # plt.axis('off')
-    # plt.title('reconstructed images')
-    #
-    # plt.figure()
-    # plt.imshow(mosaic(noised, normalize=False, clip=True))
-    # plt.axis('off')
-    # plt.title('privatized images')
-    # plt.show()
+    plt.figure()
+    plt.imshow(mosaic(prop_noised, normalize=False, clip=True))
+    plt.axis('off')
+    plt.title('properly privatized images')
+    plt.show()
