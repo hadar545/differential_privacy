@@ -136,7 +136,7 @@ class basic_AE(Model):
             reconstructions = self.call(images)
             self.train_step(images)
 
-            if iter_counter % 20 == 0:
+            if iter_counter % 100 == 0:
 
                 for test_images, _ in test_ds:
                     test_reconstructions = self.call(test_images)
@@ -813,7 +813,7 @@ def mosaic(images: list, reshape: tuple=None, gap: int=1,
 
 ################# main #################
 
-EPOCHS = 30
+EPOCHS = 20
 LAMBDA = 0.00001
 LATENT_SIZE = 256
 
@@ -835,19 +835,19 @@ LATENT_SIZE = 256
 # plt.show()
 
 # run on celebA
-train_ds, test_ds = prepare_data_celebA(portion=0.5)
+train_ds, test_ds = prepare_data_celebA(portion=1)
 # model, model_dir = main_AE(celebA_VAE, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
 
 # model, model_dir = main_AE(celebA_AE, train_ds, test_ds, use_pretrained=1, do_training=0)
 # model.run_noisy_and_create_new_ds(test_ds, model_dir)
 
 latent_sizes = [256, 100, 2]
-lambdas = [0] #, 0.00001, 0.000001, 0.0001]
+lambdas = [0.00001, 0.000001]
 for z in latent_sizes:
     for l in lambdas:
         LATENT_SIZE, LAMBDA = z, l
         print('\n'*5, "*** LATENT_SIZE={}  LAMBDA={} ***".format(LATENT_SIZE, LAMBDA))
-        model, model_dir = main_AE(celebA_VAE, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
+        model, model_dir = main_AE(celebA_AE_BN, train_ds, test_ds, use_pretrained=1, do_save=1, do_save_encodings=0, do_plot=1)
 
 # # create new ds for Hadar:
 # all_images = np.load('data/full128_10k.npy').astype(np.float32) / 255.0
