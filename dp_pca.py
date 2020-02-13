@@ -77,15 +77,17 @@ class pPCA:
         :param y: not used (defaults to None) - a parameter to fit the API of a standard sklearn model
         :return: the fitted model
         """
-        print('Fitting a pPCA model from {} samples'.format(X.shape[0]))
         self._shape = list(X.shape[1:])
+        print('Fitting a pPCA model to {} samples with latent dimension {}\n'
+              'The original shape of the data points is {}'
+              .format(X.shape[0], self.latent, X.shape[1:]))
         self._d = np.prod(self._shape)
         if X.ndim > 2:
             X = X.copy().reshape((X.shape[0], np.prod(X.shape[1:])))
         self.mu = X.sum(axis=0)/X.shape[0]
         _, s, v = np.linalg.svd(X - self.mu, full_matrices=False)
         sig = (s ** 2) / X.shape[0]
-        self.phi = np.sum(sig[self.latent:]) / (self._d - self.latent)
+        self.phi = np.maximum(np.sum(sig[self.latent:]) / (self._d - self.latent), 10e-8)
         self.W = v[:self.latent, :].T * np.sqrt(sig[:self.latent] - self.phi)[None, :]
         self._update_M()
         self._trained = True
@@ -215,21 +217,27 @@ if __name__ == '__main__':
     mod = pPCA(latent_dim=256).fit(ims)
 
     en = mod.encode(ims)
+    ch = np.random.choice(en.shape[0], 2, replace=False)
+    interp = np.array([(1-a)*en[ch[0]] + a*en[ch[1]] for a in np.linspace(0, 1.1, 50)])
     part = ims[:50]
     noised = mod.privatize(part, noise=1)
-
     plt.figure()
-    plt.imshow(mosaic(part, normalize=False))
+    plt.imshow(mosaic(mod.decode(interp), normalize=False, clip=True))
     plt.axis('off')
-    plt.title('original images')
-
-    plt.figure()
-    plt.imshow(mosaic(mod.decode(mod.encode(part)), normalize=False))
-    plt.axis('off')
-    plt.title('reconstructed images')
-
-    plt.figure()
-    plt.imshow(mosaic(noised, normalize=False))
-    plt.axis('off')
-    plt.title('privatized images')
     plt.show()
+
+    # plt.figure()
+    # plt.imshow(mosaic(part, normalize=False))
+    # plt.axis('off')
+    # plt.title('original images')
+    #
+    # plt.figure()
+    # plt.imshow(mosaic(mod.decode(mod.encode(part)), normalize=False, clip=True))
+    # plt.axis('off')
+    # plt.title('reconstructed images')
+    #
+    # plt.figure()
+    # plt.imshow(mosaic(noised, normalize=False, clip=True))
+    # plt.axis('off')
+    # plt.title('privatized images')
+    # plt.show()
