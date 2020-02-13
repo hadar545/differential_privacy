@@ -58,6 +58,10 @@ class pPCA:
         self._shape, self._d = [], 0
         self._trained = False
 
+    def __str__(self): return 'pPCA_z{}'.format(self.latent)
+
+    def __repr__(self): return 'pPCA_z{}'.format(self.latent)
+
     def _update_M(self):
         """
         Updates inner parameters (which shouldn't be needed by anyone outside of the class)
@@ -126,6 +130,16 @@ class pPCA:
         X = (self.W @ inved @ self.M @ Z.T).T + self.mu[None, :]
         return X.reshape([X.shape[0]] + self._shape)
 
+    def generate(self, N: int):
+        """
+        Generate data from the learned model
+        :param N: number of samples to generate
+        :return: a numpy array of dimension [N, ...] of generated samples (where '...' stands for
+                 the original shape of the data the model was trained on)
+        """
+        assert self._trained, "Model must be trained before trying to generate data from it"
+        return self.decode(np.random.randn(N, self.latent))
+
     def privatize(self, X: np.ndarray, noise: float=.1, return_encodings: bool=False):
         """
         Privatize the datapoints in X by using a DP Gaussian Mechanism on the latent encodings of X as
@@ -147,10 +161,12 @@ class pPCA:
             return Z, Z_noise, self.decode(Z_noise)
         return self.decode(Z_noise)
 
-    def save(self, path):
+    def save(self, path: str=None):
         """
         Saves a pPCA model
-        :param path: the path to save the model to. The model is saved using pickle
+        :param path: the path to save the model to; if no path was given, the model is saved in the current
+                     directory with a default name format "pPCA_z<latent_dim>.pkl". The model is saved
+                     using pickle
         """
         params = {'mu': self.mu,
                   'W': self.W,
@@ -158,12 +174,13 @@ class pPCA:
                   'latent': self.latent,
                   'shape': self._shape,
                   'd': self._d}
+        if path is None: path = str(self) + '.pkl'
         with open(path, 'wb') as f:
             pickle.dump(params, f)
         print('Saved model as file {}'.format(path))
 
     @staticmethod
-    def load(path):
+    def load(path: str):
         """
         Loads a pPCA model
         :param path: the path to load the model from
