@@ -1,8 +1,10 @@
-from sklearn.decomposition import PCA
+# from sklearn.decomposition import PCA
 import numpy as np
 from matplotlib import pyplot as plt
 from typing import Union
 import pickle
+from utils import *
+import datetime
 
 
 def mosaic(images: Union[list, np.ndarray], reshape: tuple=None, gap: int=1,
@@ -225,22 +227,23 @@ class pPCA:
 
 
 if __name__ == '__main__':
-    sz = 100
-    f_path1 = "C:/Users/Roy/University/UniGoogleDrive/Studies" \
-             "/Master/project/CelebA/numpy_CelebA/CelebA_c1_{}.npy".format(sz)
-    f_path2 = "C:/Users/Roy/University/UniGoogleDrive/Studies" \
-              "/Master/project/CelebA/numpy_CelebA/CelebA_c2_{}.npy".format(sz)
-    ims1 = np.load(f_path1)
-    ims2 = np.load(f_path2)
-    ims = np.concatenate([ims1, ims2])
-    labels = np.zeros(ims.shape[0])
-    labels[ims1.shape[0]:] = 1
+    # sz = 100
+    # f_path1 = "C:/Users/Roy/University/UniGoogleDrive/Studies" \
+    #          "/Master/project/CelebA/numpy_CelebA/CelebA_c1_{}.npy".format(sz)
+    # f_path2 = "C:/Users/Roy/University/UniGoogleDrive/Studies" \
+    #           "/Master/project/CelebA/numpy_CelebA/CelebA_c2_{}.npy".format(sz)
+    # ims1 = np.load(f_path1)
+    # ims2 = np.load(f_path2)
+    # ims = np.concatenate([ims1, ims2])
+    # labels = np.zeros(ims.shape[0])
+    # labels[ims1.shape[0]:] = 1
+    ims = np.load('/cs/labs/josko/roei.yehuda/DP_project/data/full128_10k.npy')[:5000]/255.0
     N = ims.shape[0]
-    ims = ims.reshape((N, sz, sz, 3))
-    # mod = pPCA(latent_dim=256).fit(ims)
-    # mod.save()
+    mod = pPCA(latent_dim=256).fit(ims)
+    saved_models_dir = check_dir_exists('models/' + str(mod))
+    mod.save(saved_models_dir + '/model_at_{}'.format(datetime.datetime.now().strftime('%d%m%Y-%H%M')))
 
-    mod = pPCA.load('pPCA_z256.pkl')
+    # mod = pPCA.load('pPCA_z256.pkl')
     en = mod.encode(ims)
     ch = np.random.choice(en.shape[0], 2, replace=False)
     part = ims[:50]

@@ -136,7 +136,7 @@ class basic_AE(Model):
             reconstructions = self.call(images)
             self.train_step(images)
 
-            if iter_counter % 10 == 0:
+            if iter_counter % 100 == 0:
 
                 for test_images, _ in test_ds:
                     test_reconstructions = self.call(test_images)
@@ -847,7 +847,7 @@ for z in latent_sizes:
     for l in lambdas:
         LATENT_SIZE, LAMBDA = z, l
         print('\n'*5, "*** LATENT_SIZE={}  LAMBDA={} ***".format(LATENT_SIZE, LAMBDA))
-        model, model_dir = main_AE(celebA_AE_BN, train_ds, test_ds, use_pretrained=0, do_save=1, do_save_encodings=0, do_plot=1)
+        model, model_dir = main_AE(celebA_AE_BN, train_ds, test_ds, use_pretrained=1, do_save=1, do_save_encodings=0, do_plot=1)
 
 # # create new ds for Hadar:
 # all_images = np.load('data/full128_10k.npy').astype(np.float32) / 255.0
