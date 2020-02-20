@@ -393,14 +393,30 @@ def privatization(images, model_paths: dict, save_path="models/pPCA/", latent_di
     plt.savefig(save_path + 'privatization_stats.png')
 
 
+def save_noisy(images, model_paths: dict, save_path="models/pPCA/noised/",
+               noise=(0, .001, .01, .1, .15, .3, .5, .75, 1, 1.5, 2, 3)):
+    from pathlib import Path
+    Path(save_path).mkdir(parents=True, exist_ok=True)
+    l_dims = list(model_paths.keys())
+    np.save(save_path + 'original_images.npy', images)
+    for l in l_dims:
+        mod = pPCA.load(model_paths[l])
+        print(mod)
+        for e in noise:
+            print('\t{}'.format(e))
+            np.save(save_path + 'priv_{}_e{}.npy'.format(str(mod), e), mod.privatize(images, noise=e))
+            np.save(save_path + 'prop_{}_e{}.npy'.format(str(mod), e), mod.prop_privatize(images, noise=e))
+
+
 if __name__ == '__main__':
     ims = np.load('/cs/labs/yweiss/roy.friedmam/full128_10k.npy')[:5000]/255.0
     N = ims.shape[0]
 
     paths = create_models(ims, fit=False)
-    reconstruction_errs(ims[:500], paths)
-    privatization(ims[:500], paths)
-    #
+    # reconstruction_errs(ims[:500], paths)
+    # privatization(ims[:500], paths)
+    save_noisy(ims[:1000], model_paths=paths)
+
     # en = mod.encode(ims)
     # ch = np.random.choice(en.shape[0], 2, replace=False)
     # part = ims[:50]
