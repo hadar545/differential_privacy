@@ -408,6 +408,40 @@ def save_noisy(images, model_paths: dict, save_path="models/pPCA/noised/",
             np.save(save_path + 'prop_{}_e{}.npy'.format(str(mod), e), mod.prop_privatize(images, noise=e))
 
 
+def simple_query(images, model_paths: dict, mid_amnt: int=15, save_path="models/pPCA/",
+                 noise=(0.001, 0.01, .1, .5, 1, 2, 5), lat_dims=(50, 100, 300)):
+    _query = lambda x: np.mean(x[:, mid-mid_amnt:mid+mid_amnt, mid-mid_amnt:mid+mid_amnt], axis=(1, 2))
+    _bin_query = lambda q: np.sum(np.where(q > .5)[0])
+    mid = images.shape[1]//2
+    true_queries = _query(images)
+    binary_queries = _bin_query(true_queries)
+    _to_range = lambda x: np.clip((x - np.min(true_queries))/(np.max(true_queries) - np.min(true_queries)), 0, 1)
+    true_queries = _to_range(true_queries)
+    glob_acc = np.zeros((len(lat_dims), len(noise), 2))
+    loc_acc = np.zeros((len(lat_dims), len(noise), 2))
+    for i, l in enumerate(lat_dims):
+        mod = pPCA.load(model_paths[l])
+        for j, e in enumerate(noise):
+            noised = _to_range(_query(mod.privatize(images, e)))
+            n_noised = _to_range(_query(mod.prop_privatize(images, e)))
+            loc_acc[i, j, 0] = 1 - np.mean(np.abs(true_queries - noised))
+            loc_acc[i, j, 1] = 1 - np.mean(np.abs(true_queries - n_noised))
+
+            glob_acc[i, j, 0] = 1 - np.abs(binary_queries - _bin_query(noised))
+            glob_acc[i, j, 1] = 1 - np.abs(binary_queries - _bin_query(n_noised))
+
+    for n, s in ['pPCA', 'npPCA']:
+        plt.figure()
+        for i, l in enumerate(lat_dims):
+            plt.plot(noise, glob_acc[i, :, n], lw=2, label='global z={}'.format(l))
+            plt.plot(noise, loc_acc[i, :, n], '--', lw=2, label='local z={}'.format(l))
+        plt.xlabel('noise')
+        plt.ylabel('accuracy')
+        plt.xscale('log')
+        plt.legend(loc='lower right')
+        plt.savefig(save_path + '{}_simplequery_acc.png'.format(s))
+
+
 if __name__ == '__main__':
     ims = np.load('/cs/labs/yweiss/roy.friedmam/full128_10k.npy')[:5000]/255.0
     N = ims.shape[0]
@@ -416,38 +450,3 @@ if __name__ == '__main__':
     # reconstruction_errs(ims[:500], paths)
     privatization(ims[:500], paths)
     # save_noisy(ims[:1000], model_paths=paths)
-
-    # en = mod.encode(ims)
-    # ch = np.random.choice(en.shape[0], 2, replace=False)
-    # part = ims[:50]
-    # noise = .5
-    # noised = mod.privatize(part, noise=noise)
-    # prop_noised = mod.prop_privatize(part, noise=noise)
-    #
-    # # interp = np.array([(1-a)*en[ch[0]] + a*en[ch[1]] for a in np.linspace(0, 1.1, 50)])
-    # # plt.figure()
-    # # plt.imshow(mosaic(mod.decode(interp), normalize=False, clip=True))
-    # # plt.axis('off')
-    # # plt.show()
-    #
-    # plt.figure()
-    # plt.imshow(mosaic(part, normalize=False))
-    # plt.axis('off')
-    # plt.title('original images')
-    #
-    # plt.figure()
-    # plt.imshow(mosaic(mod.decode(mod.encode(part)), normalize=False, clip=True))
-    # plt.axis('off')
-    # plt.title('reconstructed images')
-    #
-    # plt.figure()
-    # plt.imshow(mosaic(noised, normalize=False, clip=True))
-    # plt.axis('off')
-    # plt.title('privatized images')
-    # plt.show()
-    #
-    # plt.figure()
-    # plt.imshow(mosaic(prop_noised, normalize=False, clip=True))
-    # plt.axis('off')
-    # plt.title('properly privatized images')
-    # plt.show()
