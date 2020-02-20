@@ -448,5 +448,6 @@ if __name__ == '__main__':
 
     paths = create_models(ims, fit=False)
     # reconstruction_errs(ims[:500], paths)
-    privatization(ims[:500], paths)
+    # privatization(ims[:500], paths)
     # save_noisy(ims[:1000], model_paths=paths)
+    simple_query(ims[:1000], model_paths=paths)
