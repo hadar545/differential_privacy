@@ -451,3 +451,4 @@ if __name__ == '__main__':
     # privatization(ims[:500], paths)
     # save_noisy(ims[:1000], model_paths=paths)
     simple_query(ims[:1000], model_paths=paths)
+
