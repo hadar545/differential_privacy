@@ -185,7 +185,7 @@ class pPCA:
         """
         if self._trained: Z = self.encode(X)
         else: Z = self.fit_transform(X)
-        Z_noise = (Z + np.sqrt(noise)*np.random.randn(Z.shape[0], Z.shape[1]))/(1 + np.sqrt(noise))
+        Z_noise = (Z + np.sqrt(noise)*np.random.randn(Z.shape[0], Z.shape[1]))/np.sqrt(1 + noise)
         if return_encodings:
             return Z, Z_noise, self.decode(Z_noise)
         return self.decode(Z_noise)
@@ -377,14 +377,14 @@ def privatization(images, model_paths: dict, save_path="models/pPCA/", latent_di
 
     plt.figure()
     plt.subplot(1, 2, 1)
-    plt.errorbar(noise, priv_rmse, priv_rmse_std, capsize=5, elinewidth=2, lw=2, label='standard')
-    plt.errorbar(noise, prop_rmse, prop_rmse_std, capsize=5, elinewidth=2, lw=2, label='proper')
+    plt.errorbar(noise, priv_rmse, priv_rmse_std, capsize=5, elinewidth=2, lw=2, label='pPCA')
+    plt.errorbar(noise, prop_rmse, prop_rmse_std, capsize=5, elinewidth=2, lw=2, label='npPCA')
     plt.xlabel('standard deviation of added noise')
     plt.ylabel('RMSE from originals')
 
     plt.subplot(1, 2, 2)
-    plt.errorbar(noise, priv_mean, priv_mean_std, capsize=5, elinewidth=2, lw=2, label='standard')
-    plt.errorbar(noise, prop_mean, prop_mean_std, capsize=5, elinewidth=2, lw=2, label='proper')
+    plt.errorbar(noise, priv_mean, priv_mean_std, capsize=5, elinewidth=2, lw=2, label='pPCA')
+    plt.errorbar(noise, prop_mean, prop_mean_std, capsize=5, elinewidth=2, lw=2, label='npPCA')
     plt.xlabel('standard deviation of added noise')
     plt.ylabel('RMSE from mean image')
     plt.legend()
@@ -414,8 +414,8 @@ if __name__ == '__main__':
 
     paths = create_models(ims, fit=False)
     # reconstruction_errs(ims[:500], paths)
-    # privatization(ims[:500], paths)
-    save_noisy(ims[:1000], model_paths=paths)
+    privatization(ims[:500], paths)
+    # save_noisy(ims[:1000], model_paths=paths)
 
     # en = mod.encode(ims)
     # ch = np.random.choice(en.shape[0], 2, replace=False)
