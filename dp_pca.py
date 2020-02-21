@@ -411,9 +411,9 @@ def save_noisy(images, model_paths: dict, save_path="models/pPCA/noised/",
 def simple_query(images, model_paths: dict, mid_amnt: int=15, save_path="models/pPCA/",
                  noise=(0.001, 0.01, .1, .5, 1, 2, 5), lat_dims=(50, 100, 300)):
     _query = lambda x: np.mean(x[:, mid-mid_amnt:mid+mid_amnt, mid-mid_amnt:mid+mid_amnt], axis=(1, 2))
-    _bin_query = lambda q: np.sum(np.where(q > .5)[0])
+    _bin_query = lambda q: (q[q > .5]).shape[0]
     mid = images.shape[1]//2
-    true_queries = _query(images)
+    true_queries = _query(images[:, :, :, 0])
     binary_queries = _bin_query(true_queries)
     _to_range = lambda x: np.clip((x - np.min(true_queries))/(np.max(true_queries) - np.min(true_queries)), 0, 1)
     true_queries = _to_range(true_queries)
@@ -422,15 +422,16 @@ def simple_query(images, model_paths: dict, mid_amnt: int=15, save_path="models/
     for i, l in enumerate(lat_dims):
         mod = pPCA.load(model_paths[l])
         for j, e in enumerate(noise):
-            noised = _to_range(_query(mod.privatize(images, e)))
-            n_noised = _to_range(_query(mod.prop_privatize(images, e)))
+            print('latent z={}, noise={}'.format(l, e), flush=True)
+            noised = _to_range(_query(mod.privatize(images, e)[:,:,:,0]))
+            n_noised = _to_range(_query(mod.prop_privatize(images, e)[:,:,:,0]))
             loc_acc[i, j, 0] = 1 - np.mean(np.abs(true_queries - noised))
             loc_acc[i, j, 1] = 1 - np.mean(np.abs(true_queries - n_noised))
+            #print(_bin_query(noised), noised.shape[0], noised.shape)
+            glob_acc[i, j, 0] = 1 - np.abs(binary_queries - _bin_query(noised))/noised.shape[0]
+            glob_acc[i, j, 1] = 1 - np.abs(binary_queries - _bin_query(n_noised))/noised.shape[0]
 
-            glob_acc[i, j, 0] = 1 - np.abs(binary_queries - _bin_query(noised))
-            glob_acc[i, j, 1] = 1 - np.abs(binary_queries - _bin_query(n_noised))
-
-    for n, s in ['pPCA', 'npPCA']:
+    for n, s in enumerate(['pPCA', 'npPCA']):
         plt.figure()
         for i, l in enumerate(lat_dims):
             plt.plot(noise, glob_acc[i, :, n], lw=2, label='global z={}'.format(l))
@@ -438,7 +439,7 @@ def simple_query(images, model_paths: dict, mid_amnt: int=15, save_path="models/
         plt.xlabel('noise')
         plt.ylabel('accuracy')
         plt.xscale('log')
-        plt.legend(loc='lower right')
+        plt.legend(loc='lower left')
         plt.savefig(save_path + '{}_simplequery_acc.png'.format(s))
 
 
