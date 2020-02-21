@@ -299,11 +299,12 @@ def reconstruction_errs(images, model_paths: dict, save_path="models/pPCA/"):
 
 
 def privatization(images, model_paths: dict, save_path="models/pPCA/", latent_dim=300,
-                  noise=(0, .001, .01, .1, .15, .3, .5, .75, 1, 1.5)):
+                  noise=(0, .001, .01, .1, .15, .3, .5, .75, 1, 2, 5)):
     chosen = np.random.choice(images.shape[0], 10, replace=False)
 
     privatized = []
     prop_privatized = []
+    pixel = []
     wien = []
 
     priv_rmse = []
@@ -339,6 +340,9 @@ def privatization(images, model_paths: dict, save_path="models/pPCA/", latent_di
         prop_mean.append(np.mean(m))
         prop_mean_std.append(np.std(m))
 
+        eps = np.sqrt(e)*np.random.randn(np.prod(images[chosen].shape)).reshape(images[chosen].shape)
+        pixel.append(mosaic(images[chosen] + eps, normalize=False, clip=True, cols=1))
+
     plt.figure()
     plt.subplot(1, len(privatized)+1, 1)
     plt.imshow(mosaic(images[chosen], normalize=False, clip=True, cols=1))
@@ -362,6 +366,18 @@ def privatization(images, model_paths: dict, save_path="models/pPCA/", latent_di
         plt.axis('off')
         # plt.title(r'$\epsilon = ' + str(noise[i]) + '$')
     plt.savefig(save_path + 'wien_images.png', dpi=300)
+
+    plt.figure()
+    plt.subplot(1, len(pixel) + 1, 1)
+    plt.imshow(mosaic(images[chosen], normalize=False, clip=True, cols=1))
+    plt.axis('off')
+    # plt.title('originals')
+    for i, im in enumerate(pixel):
+        plt.subplot(1, len(pixel) + 1, i + 2)
+        plt.imshow(im)
+        plt.axis('off')
+        # plt.title(r'$\epsilon = ' + str(noise[i]) + '$')
+    plt.savefig(save_path + 'pixel_images.png', dpi=300)
 
     plt.figure()
     plt.subplot(1, len(prop_privatized)+1, 1)
@@ -462,7 +478,7 @@ if __name__ == '__main__':
 
     paths = create_models(ims, fit=False)
     # reconstruction_errs(ims[:500], paths)
-    # privatization(ims[:500], paths)
+    privatization(ims[:500], paths)
     # save_noisy(ims[:1000], model_paths=paths)
-    simple_query(ims[:1000], model_paths=paths)
+    # simple_query(ims[:1000], model_paths=paths)
 
