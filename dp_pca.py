@@ -419,6 +419,7 @@ def simple_query(images: np.ndarray, model_paths: dict, mid_amnt: int=15, save_p
     true_queries = _to_range(true_queries)
     glob_acc = np.zeros((len(lat_dims)+1, len(noise), 2))
     loc_acc = np.zeros((len(lat_dims)+1, len(noise), 2))
+
     for i, l in enumerate(lat_dims):
         mod = pPCA.load(model_paths[l])
         for j, e in enumerate(noise):
@@ -439,15 +440,18 @@ def simple_query(images: np.ndarray, model_paths: dict, mid_amnt: int=15, save_p
 
     for n, s in enumerate(['pPCA', 'npPCA']):
         plt.figure()
-        plt.plot(noise, glob_acc[-1, :, 0], lw=2, label='global pixels')
-        plt.plot(noise, loc_acc[-1, :, 0], '--', lw=2, label='local pixels')
+        ax = plt.gca()
+        color = next(ax._get_lines.prop_cycler)['color']
+        plt.plot(noise, glob_acc[-1, :, 0], lw=2, label='global pixels', color=color)
+        plt.plot(noise, loc_acc[-1, :, 0], '--', lw=2, label='local pixels', color=color)
 
         for i, l in enumerate(lat_dims):
-            plt.plot(noise, glob_acc[i, :, n], lw=2, label='global z={}'.format(l))
-            plt.plot(noise, loc_acc[i, :, n], '--', lw=2, label='local z={}'.format(l))
+            color = next(ax._get_lines.prop_cycler)['color']
+            plt.plot(noise, glob_acc[i, :, n], lw=2, label='global z={}'.format(l), color=color)
+            plt.plot(noise, loc_acc[i, :, n], '--', lw=2, label='local z={}'.format(l), color=color)
         plt.xlabel('noise')
         plt.ylabel('accuracy')
-        plt.xscale('log')
+        # plt.xscale('log')
         plt.legend(loc='lower left')
         plt.savefig(save_path + '{}_simplequery_acc.png'.format(s))
 
