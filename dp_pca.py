@@ -408,31 +408,40 @@ def save_noisy(images, model_paths: dict, save_path="models/pPCA/noised/",
             np.save(save_path + 'prop_{}_e{}.npy'.format(str(mod), e), mod.prop_privatize(images, noise=e))
 
 
-def simple_query(images, model_paths: dict, mid_amnt: int=15, save_path="models/pPCA/",
+def simple_query(images: np.ndarray, model_paths: dict, mid_amnt: int=15, save_path="models/pPCA/",
                  noise=(0.001, 0.01, .1, .5, 1, 2, 5), lat_dims=(50, 100, 300)):
-    _query = lambda x: np.mean(x[:, mid-mid_amnt:mid+mid_amnt, mid-mid_amnt:mid+mid_amnt], axis=(1, 2))
+    _query = lambda x: np.mean(x[:, mid-mid_amnt:mid+mid_amnt, mid-mid_amnt:mid+mid_amnt], axis=(1, 2, 3))
     _bin_query = lambda q: (q[q > .5]).shape[0]
     mid = images.shape[1]//2
-    true_queries = _query(images[:, :, :, 0])
+    true_queries = _query(images)
     binary_queries = _bin_query(true_queries)
     _to_range = lambda x: np.clip((x - np.min(true_queries))/(np.max(true_queries) - np.min(true_queries)), 0, 1)
     true_queries = _to_range(true_queries)
-    glob_acc = np.zeros((len(lat_dims), len(noise), 2))
-    loc_acc = np.zeros((len(lat_dims), len(noise), 2))
+    glob_acc = np.zeros((len(lat_dims)+1, len(noise), 2))
+    loc_acc = np.zeros((len(lat_dims)+1, len(noise), 2))
     for i, l in enumerate(lat_dims):
         mod = pPCA.load(model_paths[l])
         for j, e in enumerate(noise):
             print('latent z={}, noise={}'.format(l, e), flush=True)
-            noised = _to_range(_query(mod.privatize(images, e)[:,:,:,0]))
-            n_noised = _to_range(_query(mod.prop_privatize(images, e)[:,:,:,0]))
+            noised = _to_range(_query(mod.privatize(images, e)))
+            n_noised = _to_range(_query(mod.prop_privatize(images, e)))
             loc_acc[i, j, 0] = 1 - np.mean(np.abs(true_queries - noised))
             loc_acc[i, j, 1] = 1 - np.mean(np.abs(true_queries - n_noised))
-            #print(_bin_query(noised), noised.shape[0], noised.shape)
             glob_acc[i, j, 0] = 1 - np.abs(binary_queries - _bin_query(noised))/noised.shape[0]
             glob_acc[i, j, 1] = 1 - np.abs(binary_queries - _bin_query(n_noised))/noised.shape[0]
 
+    for j, e in enumerate(noise):
+        print('latent pixel space, noise={}'.format(e), flush=True)
+        eps = np.sqrt(e)*np.random.randn(np.prod(images.shape)).reshape(images.shape)
+        noised = _to_range(_query((images + eps)))
+        loc_acc[-1, j] = 1 - np.mean(np.abs(true_queries - noised))
+        glob_acc[-1, j] = 1 - np.abs(binary_queries - _bin_query(noised)) / noised.shape[0]
+
     for n, s in enumerate(['pPCA', 'npPCA']):
         plt.figure()
+        plt.plot(noise, glob_acc[-1, :, 0], lw=2, label='global pixels')
+        plt.plot(noise, loc_acc[-1, :, 0], '--', lw=2, label='local pixels')
+
         for i, l in enumerate(lat_dims):
             plt.plot(noise, glob_acc[i, :, n], lw=2, label='global z={}'.format(l))
             plt.plot(noise, loc_acc[i, :, n], '--', lw=2, label='local z={}'.format(l))
